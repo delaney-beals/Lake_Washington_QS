@@ -1,18 +1,129 @@
 ---
 title: "Lake Washington metagenome and metatranscriptome meta-analysis"
 output: html_notebook
+editor_options: 
+  markdown: 
+    wrap: 72
 ---
 
-This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+I have downloaded metagenomes and metatranscriptomes from the JGI IMG database for the following studies:
 
-Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+-   "Freshwater sediment methanotrophic microbial communities from Lake Washington under simulated oxygen tension"
 
+-   "Synthetic bacterial communities of pure cultures isolated from sediment of Lake Washington, USA"
+
+I want to take a look at these files since I don't really know what's in the giant .tar file I have.
+
+To work with .tar files in R, you can use the tar function to list the contents of the tar archive and the untar function to extract specific files without needing to extract the entire archive. This approach allows you to "peek" into the files contained within the .tar file. Here’s how you can do it:
+
+Listing Contents of a .tar File
+To list the contents of a .tar file, you can use the following. This command prints the names of the files contained in the tar archive to the console.
 ```{r}
-plot(cars)
+tarfile <- "LW_QS_img_data.tar"
+tar("tf", tarfile)
 ```
 
-Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+The error you're encountering with the tar function in R, indicating that the file size is limited to 8GB, suggests you're dealing with a limitation of the R implementation or possibly an underlying system limitation related to handling large files.
 
-When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+To work around this issue, you might consider using command-line tools directly from R using the system or system2 function, which allows you to execute external commands. Many systems' native tar command does not have the same limitation and can handle larger files. Here's how you can do it:
 
-The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+1. Listing Contents of a .tar File
+To list the contents of the .tar file using the system's native tar command:
+```{r}
+tarfile <- "LW_QS_img_data.tar"
+cmd <- paste("tar -tf", shQuote(tarfile))
+system(cmd)
+```
+
+Looks like everything is listed as the IMG genome ID, so as an example: 2634166257.tar.gz
+
+
+Extracting Specific Files to Peek into Their Contents
+If you want to look at the contents of specific files within the .tar archive without extracting everything, you can use the untar function with the list and exdir parameters. However, to directly read the contents into R (for example, to read the first few lines of a file to understand its structure), you'll need a slightly more involved approach.
+
+2. Extracting Files
+If you want to extract one or more specific files to peek at their contents without fully extracting the .tar archive, you can also do this with system:
+
+```{r}
+# Specify the file(s) you want to extract
+MGX_37_LOW7 <- "3300004164.tar.gz"
+# Specify where to extract the files
+extractionPath <- "genomes"
+
+# Create the command string
+cmd <- paste("tar -xf", shQuote(tarfile), "-C", shQuote(extractionPath), shQuote(MGX_37_LOW7))
+
+# Execute the command
+system(cmd)
+```
+
+List the files that are contained within 3300004164.tar.gz
+```{r}
+# List contents of the .tar.gz file
+tarfile <- "genomes/3300004164.tar.gz"
+cmd <- paste("tar -tzf", shQuote(tarfile))
+system(cmd)
+```
+List of files within one metagenome.tar.gz file: 
+  3300004164/3300004164.a.cog.txt
+  3300004164/3300004164.a.depth.txt
+  3300004164/3300004164.a.ec.txt
+  3300004164/3300004164.a.faa
+  3300004164/3300004164.a.fna
+  3300004164/3300004164.a.gene_product.txt
+  3300004164/3300004164.a.gff
+  3300004164/3300004164.a.ko.txt
+  3300004164/3300004164.a.map.txt
+  3300004164/3300004164.a.pfam.txt
+  3300004164/3300004164.a.phylodist.txt
+  3300004164/3300004164.config
+  3300004164/3300004164.crispr.txt
+  3300004164/3300004164.u.cog.txt
+  3300004164/3300004164.u.ec.txt
+  3300004164/3300004164.u.faa
+  3300004164/3300004164.u.fna
+  3300004164/3300004164.u.gene_product.txt
+  3300004164/3300004164.u.gff
+  3300004164/3300004164.u.ko.txt
+  3300004164/3300004164.u.map.txt
+  3300004164/3300004164.u.pfam.txt
+  3300004164/3300004164.u.phylodist.txt
+  3300004164/README.txt
+
+Look at specific files by extracting them into a folder
+```{r}
+# Extract a specific file from the .tar.gz file
+tarfile <- "genomes/3300004164.tar.gz"
+destDir <- "C:/Users/Delaney/OneDrive/unknown/Documents/University of Utah/Puri Lab/4. Lake Washington/LW_QS_R/Lake_Washington_QS"  # Make sure to use forward slashes or double backslashes
+fileName <- "3300004164/README.txt"
+
+cmd <- paste("tar -xzf", shQuote(tarfile), "-C", shQuote(destDir), shQuote(fileName))
+system(cmd)
+```
+
+Looks like ".u." means "unassembled" and ".a." means "assembled"
+
+Extract all the files that are assembled, as well as the .config and README, etc. 
+```{r}
+# Define the path to the .tar.gz file
+tarGzFile <- "genomes/3300004164.tar.gz"
+
+# List all files in the .tar.gz archive
+cmdList <- sprintf("tar -tzf %s", shQuote(tarGzFile))
+allFiles <- system(cmdList, intern = TRUE)
+
+# Filter out files containing '.u.'
+filesToExtract <- allFiles[!grepl("\\.u\\.", allFiles)]
+
+# Extract these files
+# Define the extraction directory
+extractionDir <- "C:/Users/Delaney/OneDrive/unknown/Documents/University of Utah/Puri Lab/4. Lake Washington/LW_QS_R/Lake_Washington_QS"
+dir.create(extractionDir, recursive = TRUE, showWarnings = FALSE)
+
+# Iterate over files to extract and extract each
+for (file in filesToExtract) {
+  cmdExtract <- sprintf("tar -xzf %s -C %s %s", shQuote(tarGzFile), shQuote(extractionDir), file)
+  system(cmdExtract)
+}
+```
+
