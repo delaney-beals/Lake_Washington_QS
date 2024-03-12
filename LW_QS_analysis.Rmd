@@ -1,48 +1,80 @@
 ---
-title: "Lake Washington metagenome and metatranscriptome meta-analysis"
+title: "Lake Washington metagenome and metatranscriptome data exploration"
 output: html_notebook
 editor_options: 
   markdown: 
     wrap: 72
 ---
 
-I have downloaded metagenomes and metatranscriptomes from the JGI IMG database for the following studies:
+```{r}
+library(tidyr)
+library(readr)
+```
 
--   "Freshwater sediment methanotrophic microbial communities from Lake Washington under simulated oxygen tension"
+## Inspect main downloaded file
 
--   "Synthetic bacterial communities of pure cultures isolated from sediment of Lake Washington, USA"
+I have downloaded metagenomes and metatranscriptomes from the JGI IMG
+database for the following studies:
 
-I want to take a look at these files since I don't really know what's in the giant .tar file I have.
+-   "Freshwater sediment methanotrophic microbial communities from Lake
+    Washington under simulated oxygen tension"
 
-To work with .tar files in R, you can use the tar function to list the contents of the tar archive and the untar function to extract specific files without needing to extract the entire archive. This approach allows you to "peek" into the files contained within the .tar file. Here’s how you can do it:
+-   "Synthetic bacterial communities of pure cultures isolated from
+    sediment of Lake Washington, USA"
 
-Listing Contents of a .tar File
-To list the contents of a .tar file, you can use the following. This command prints the names of the files contained in the tar archive to the console.
+I want to take a look at these files since I don't really know what's in
+the giant .tar file I have.
+
+To work with .tar files in R, you can use the tar function to list the
+contents of the tar archive and the untar function to extract specific
+files without needing to extract the entire archive. This approach
+allows you to "peek" into the files contained within the .tar file.
+Here's how you can do it:
+
+Listing Contents of a .tar File To list the contents of a .tar file, you
+can use the following. This command prints the names of the files
+contained in the tar archive to the console.
+
 ```{r}
 tarfile <- "LW_QS_img_data.tar"
 tar("tf", tarfile)
 ```
 
-The error you're encountering with the tar function in R, indicating that the file size is limited to 8GB, suggests you're dealing with a limitation of the R implementation or possibly an underlying system limitation related to handling large files.
+The error you're encountering with the tar function in R, indicating
+that the file size is limited to 8GB, suggests you're dealing with a
+limitation of the R implementation or possibly an underlying system
+limitation related to handling large files.
 
-To work around this issue, you might consider using command-line tools directly from R using the system or system2 function, which allows you to execute external commands. Many systems' native tar command does not have the same limitation and can handle larger files. Here's how you can do it:
+To work around this issue, you might consider using command-line tools
+directly from R using the system or system2 function, which allows you
+to execute external commands. Many systems' native tar command does not
+have the same limitation and can handle larger files. Here's how you can
+do it:
 
-1. Listing Contents of a .tar File
-To list the contents of the .tar file using the system's native tar command:
+1.  Listing Contents of a .tar File To list the contents of the .tar
+    file using the system's native tar command:
+
 ```{r}
 tarfile <- "LW_QS_img_data.tar"
 cmd <- paste("tar -tf", shQuote(tarfile))
 system(cmd)
 ```
 
-Looks like everything is listed as the IMG genome ID, so as an example: 2634166257.tar.gz
+Looks like everything is listed as the IMG genome ID, so as an example:
+2634166257.tar.gz
 
+## Extracting Specific Files to Peek into Their Contents
 
-Extracting Specific Files to Peek into Their Contents
-If you want to look at the contents of specific files within the .tar archive without extracting everything, you can use the untar function with the list and exdir parameters. However, to directly read the contents into R (for example, to read the first few lines of a file to understand its structure), you'll need a slightly more involved approach.
+If you want to look at the contents of specific files within the .tar
+archive without extracting everything, you can use the untar function
+with the list and exdir parameters. However, to directly read the
+contents into R (for example, to read the first few lines of a file to
+understand its structure), you'll need a slightly more involved
+approach.
 
-2. Extracting Files
-If you want to extract one or more specific files to peek at their contents without fully extracting the .tar archive, you can also do this with system:
+2.  Extracting Files If you want to extract one or more specific files
+    to peek at their contents without fully extracting the .tar archive,
+    you can also do this with system:
 
 ```{r}
 # Specify the file(s) you want to extract
@@ -58,39 +90,30 @@ system(cmd)
 ```
 
 List the files that are contained within 3300004164.tar.gz
+
 ```{r}
 # List contents of the .tar.gz file
 tarfile <- "genomes/3300004164.tar.gz"
 cmd <- paste("tar -tzf", shQuote(tarfile))
 system(cmd)
 ```
-List of files within one metagenome.tar.gz file: 
-  3300004164/3300004164.a.cog.txt
-  3300004164/3300004164.a.depth.txt
-  3300004164/3300004164.a.ec.txt
-  3300004164/3300004164.a.faa
-  3300004164/3300004164.a.fna
-  3300004164/3300004164.a.gene_product.txt
-  3300004164/3300004164.a.gff
-  3300004164/3300004164.a.ko.txt
-  3300004164/3300004164.a.map.txt
-  3300004164/3300004164.a.pfam.txt
-  3300004164/3300004164.a.phylodist.txt
-  3300004164/3300004164.config
-  3300004164/3300004164.crispr.txt
-  3300004164/3300004164.u.cog.txt
-  3300004164/3300004164.u.ec.txt
-  3300004164/3300004164.u.faa
-  3300004164/3300004164.u.fna
-  3300004164/3300004164.u.gene_product.txt
-  3300004164/3300004164.u.gff
-  3300004164/3300004164.u.ko.txt
-  3300004164/3300004164.u.map.txt
-  3300004164/3300004164.u.pfam.txt
-  3300004164/3300004164.u.phylodist.txt
-  3300004164/README.txt
+
+List of files within one metagenome.tar.gz file:
+3300004164/3300004164.a.cog.txt 3300004164/3300004164.a.depth.txt
+3300004164/3300004164.a.ec.txt 3300004164/3300004164.a.faa
+3300004164/3300004164.a.fna 3300004164/3300004164.a.gene_product.txt
+3300004164/3300004164.a.gff 3300004164/3300004164.a.ko.txt
+3300004164/3300004164.a.map.txt 3300004164/3300004164.a.pfam.txt
+3300004164/3300004164.a.phylodist.txt 3300004164/3300004164.config
+3300004164/3300004164.crispr.txt 3300004164/3300004164.u.cog.txt
+3300004164/3300004164.u.ec.txt 3300004164/3300004164.u.faa
+3300004164/3300004164.u.fna 3300004164/3300004164.u.gene_product.txt
+3300004164/3300004164.u.gff 3300004164/3300004164.u.ko.txt
+3300004164/3300004164.u.map.txt 3300004164/3300004164.u.pfam.txt
+3300004164/3300004164.u.phylodist.txt 3300004164/README.txt
 
 Look at specific files by extracting them into a folder
+
 ```{r}
 # Extract a specific file from the .tar.gz file
 tarfile <- "genomes/3300004164.tar.gz"
@@ -101,9 +124,15 @@ cmd <- paste("tar -xzf", shQuote(tarfile), "-C", shQuote(destDir), shQuote(fileN
 system(cmd)
 ```
 
-Looks like ".u." means "unassembled" and ".a." means "assembled"
+Looks like ".u." means "unassembled" and ".a." means "assembled".
 
-Extract all the files that are assembled, as well as the .config and README, etc. 
+I could not find Pfam00765 in the 3300004164.u.pfam.txt but I could find
+it in the 3300004164.a.pfam.txt file. I could also find it in the
+metaspades version of of the metagenome.
+
+Extract all the files that are assembled, as well as the .config and
+README, etc.
+
 ```{r}
 # Define the path to the .tar.gz file
 tarGzFile <- "genomes/3300004164.tar.gz"
@@ -125,5 +154,240 @@ for (file in filesToExtract) {
   cmdExtract <- sprintf("tar -xzf %s -C %s %s", shQuote(tarGzFile), shQuote(extractionDir), file)
   system(cmdExtract)
 }
+```
+
+The genome 3300004164 is called "Freshwater sediment methanotrophic
+microbial communities from Lake Washington under simulated oxygen
+tension - Sediment Metagenome 37_LOW7". There is a different genome that
+is named the exact same thing but has "(SPAdes)" at the end of it
+(genome 3300024940). I'd like to extract this and see how it compares to
+the non-SPAdes version.
+
+```{r}
+#confirm main downloaded file
+tarfile <- "LW_QS_img_data.tar"
+
+# Specify the file(s) you want to extract
+MGX_37_LOW7_spades <- "3300024940.tar.gz"
+# Specify where to extract the files
+extractionPath <- "genomes"
+
+# Create the command string
+cmd <- paste("tar -xf", shQuote(tarfile), "-C", shQuote(extractionPath), shQuote(MGX_37_LOW7_spades))
+
+# Execute the command
+system(cmd)
+```
+
+```{r}
+# List contents of the .tar.gz file
+tarfile <- "genomes/3300024940.tar.gz"
+cmd <- paste("tar -tzf", shQuote(tarfile))
+system(cmd)
+```
+
+Extract these files
+
+```{r}
+# Define the path to the .tar.gz file
+tarGzFile <- "genomes/3300024940.tar.gz"
+
+# List all files in the .tar.gz archive
+cmdList <- sprintf("tar -tzf %s", shQuote(tarGzFile))
+allFiles <- system(cmdList, intern = TRUE)
+
+# Filter out files containing '.u.' Replace allfiles with this in subsequent commands in this chunk
+filesToExtract <- allFiles[!grepl("\\.u\\.", allFiles)]
+
+# Extract these files
+# Define the extraction directory
+extractionDir <- "C:/Users/Delaney/OneDrive/unknown/Documents/University of Utah/Puri Lab/4. Lake Washington/LW_QS_R/Lake_Washington_QS"
+dir.create(extractionDir, recursive = TRUE, showWarnings = FALSE)
+
+# Iterate over files to extract and extract each
+for (file in filesToExtract) {
+  cmdExtract <- sprintf("tar -xzf %s -C %s %s", shQuote(tarGzFile), shQuote(extractionDir), file)
+  system(cmdExtract)
+}
+```
+
+Now extract the corresponding metatranscriptome and see what's in there
+
+```{r}
+#confirm main downloaded file
+tarfile <- "LW_QS_img_data.tar"
+
+# Specify the file(s) you want to extract
+MTX_37_LOW7 <- "3300004581.tar.gz"
+# Specify where to extract the files
+extractionPath <- "genomes"
+
+# Create the command string
+cmd <- paste("tar -xf", shQuote(tarfile), "-C", shQuote(extractionPath), shQuote(MTX_37_LOW7))
+
+# Execute the command
+system(cmd)
+```
+
+```{r}
+# Define the path to the .tar.gz file
+tarGzFile <- "genomes/3300004581.tar.gz"
+
+# List all files in the .tar.gz archive
+cmdList <- sprintf("tar -tzf %s", shQuote(tarGzFile))
+allFiles <- system(cmdList, intern = TRUE)
+
+# Filter out files containing '.u.' Replace allfiles with this in subsequent commands in this chunk
+filesToExtract <- allFiles[!grepl("\\.u\\.", allFiles)]
+
+# Extract these files
+# Define the extraction directory
+extractionDir <- "C:/Users/Delaney/OneDrive/unknown/Documents/University of Utah/Puri Lab/4. Lake Washington/LW_QS_R/Lake_Washington_QS"
+dir.create(extractionDir, recursive = TRUE, showWarnings = FALSE)
+
+# Iterate over files to extract and extract each
+for (file in allFiles) {
+  cmdExtract <- sprintf("tar -xzf %s -C %s %s", shQuote(tarGzFile), shQuote(extractionDir), file)
+  system(cmdExtract)
+}
+```
+
+Download gene expression data for the metatranscriptome (from here
+<https://img.jgi.doe.gov/cgi-bin/mer/main.cgi?section=RNAStudies&page=sampledata&sample=3426>).
+Note that after each experiment, reads are generated for each gene.
+[Coverage]{.underline} for a gene is defined as the count of these reads
+divided by the size of the gene. [Normalized Coverage]{.underline} is
+the coverage for a gene in the given experiment divided by the total
+number of reads in that experiment.
+
+When I downloaded it from IMG, all the info was in the first column,
+presumably separated by a tab or a space, which I will need to fix
+before proceeding.
+
+```{r}
+# Path to your data file
+filePath <- "rnaseq_MTX37_LOW7.csv"
+
+# Reading the data
+data <- read.delim(filePath, header = TRUE, stringsAsFactors = FALSE, row.names = "LOCUS.TAG")
+
+data <- separate(data, GENE.ID, into = c("STUDY.ID", "ASSEMBLED", "gene_id"), sep = " ", extra = "merge", fill = "right")
+```
+
+```{r}
+# confirming how normalized coverage is calculated
+
+# Calculate total reads for the experiment
+totalReads <- sum(data$READS.COUNT)
+
+
+# Calculate normalized coverage
+data$NormalizedCoverage <- (data$READS.COUNT / data$GENE.SEQ.LENGTH) / totalReads
+```
+
+## Tack on other data to this like pfams, cogs, etc.
+
+### Name all my txt files with the appropriate header based on the README files.
+
+```{r}
+#read the entire README file into R as a vector of lines
+readme_lines <- readLines("README.txt")
+
+#Define a Function to Extract Headers
+extractHeaders <- function(readme_lines, fileType) {
+  startPattern <- fileType
+  headerPattern <- "^--"
+  newSectionPattern <- "^<"
+
+  cat("Start pattern:", startPattern, "\n")
+
+  startIndices <- grep(startPattern, readme_lines)
+  if (length(startIndices) == 0) {
+    cat("No start index found for pattern:", startPattern, "\n")
+    return(NULL)
+  }
+  startIndex <- startIndices[1]
+  cat("Start index:", startIndex, "\n")
+  
+  endIndices <- grep(newSectionPattern, readme_lines[(startIndex+1):length(readme_lines)]) + startIndex
+  endIndex <- if(length(endIndices) > 0) min(endIndices) else length(readme_lines)
+  endIndex <- endIndex - 1  # Adjust to not include the start of the next section
+  cat("End index:", endIndex, "\n")
+  
+  sectionLines <- readme_lines[startIndex:endIndex]
+  headerLines <- grep(headerPattern, sectionLines, value = TRUE)
+
+  if(length(headerLines) == 0) {
+    cat("No header lines found within section for", fileType, "\n")
+    return(NULL)
+  }
+
+  headers <- gsub("^--\\s*", "", headerLines)
+  headers <- gsub("\\s*-.*$", "", headers)
+  headers <- sapply(strsplit(headers, " "), `[`, 1)
+  
+  return(headers)
+}
+```
+
+Use the Function to Get Headers for Each File Type
+```{r}
+# Extract headers for .txt files
+koHeaders <- extractHeaders(readme_lines, "ko.txt")
+pfamHeaders <- extractHeaders(readme_lines, "pfam.txt")
+cogHeaders <- extractHeaders(readme_lines, "cog.txt")
+phyloHeaders <- extractHeaders(readme_lines, "phylodist.txt")
+
+# Print extracted headers to verify
+print(phyloHeaders)
+```
+Read Files, Assign Headers, and Write CSV
+```{r}
+# Function to read a txt file, assign headers, and save as CSV
+convertToCSV <- function(file_path, headers) {
+  # Read the file without headers
+  data <- read_delim(file_path, delim = "\t", col_names = F)
+  
+  # Assign headers
+  colnames(data) <- headers
+  
+  # Construct CSV file name
+  csv_file_path <- sub("\\.txt$", ".csv", file_path)
+  
+  # Write to CSV
+  write_csv(data, csv_file_path)
+  
+  cat("Converted", file_path, "to", csv_file_path, "\n")
+}
+
+# Paths to your files
+koFile <- "3300004581/3300004581.a.ko.txt"
+pfamFile <- "3300004581/3300004581.a.pfam.txt"
+cogFile <- "3300004581/3300004581.a.cog.txt"
+phyloFile <- "3300004581/3300004581.a.phylodist.txt"
+
+# Convert files
+convertToCSV(koFile, koHeaders)
+convertToCSV(pfamFile, pfamHeaders)
+convertToCSV(cogFile, cogHeaders)
+convertToCSV(phyloFile, phyloHeaders)
+```
+### Merge specific columns to main dataframe
+```{r}
+csv_data <- read.csv("3300004581/3300004581.a.phylodist.csv")
+csv_data_subset <- csv_data[, c("gene_id", "lineage")]
+data <- merge(data, csv_data_subset, by = "gene_id", all.x = TRUE)
+
+csv_data <- read.csv("3300004581/3300004581.a.pfam.csv")
+csv_data_subset <- csv_data[, c("gene_id", "pfam_id")]
+data <- merge(data, csv_data_subset, by = "gene_id", all.x = TRUE)
+
+csv_data <- read.csv("3300004581/3300004581.a.ko.csv")
+csv_data_subset <- csv_data[, c("gene_id", "ko_term")]
+data <- merge(data, csv_data_subset, by = "gene_id", all.x = TRUE)
+
+csv_data <- read.csv("3300004581/3300004581.a.cog.csv")
+csv_data_subset <- csv_data[, c("gene_id", "cog_id")]
+data <- merge(data, csv_data_subset, by = "gene_id", all.x = TRUE)
 ```
 
