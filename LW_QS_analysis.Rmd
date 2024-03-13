@@ -7,8 +7,50 @@ editor_options:
 ---
 
 ```{r}
+library(dplyr)
+library(stringr)
 library(tidyr)
 library(readr)
+library(fs)
+```
+
+## Prep dictionary 
+The "dictionary" is the full names of the experiments I downloaded (as well as the IMG genome #) with a bit of information about the oxygen tension and the week they were sampled. It also contains info about the genome size and genome count. The files within the large file I downloaded from IMG are all recorded by their genome #, which is confusing as I am trying to compare different experimental conditions and whatnot. I'm going to first make each experiment have a shortened identifier (e.g., MTX37_LOW7 for metatranscriptome 37- low oxygen, week 7) and then use the dictionary document ("IMG_genome_names") to change the folder and file names for each genome that I extract. 
+
+```{r}
+# Load the data
+IMG_names <- read.csv("IMG_genome_names_old.csv")
+
+generateNickname <- function(name) {
+  nickname <- NA_character_ # Default to NA character vector
+  
+  if(str_detect(name, "Sediment Metagenome")) {
+    matches <- str_match(name, "Sediment Metagenome (\\d+)_([A-Z0-9]+)")
+    nickname <- paste0("MG", matches[,2], "_", matches[,3])
+    if(str_detect(name, "\\(SPAdes\\)")) nickname <- paste0(nickname, "_sp")
+  } else if(str_detect(name, "Sediment Metatranscriptome")) {
+    matches <- str_match(name, "Sediment Metatranscriptome (\\d+)_([A-Z0-9]+)")
+    nickname <- paste0("MT", matches[,2], "_", matches[,3])
+  } else if(str_detect(name, "Synthetic bacterial communities")) {
+    nickname <- "Synth_MT14strains_1hr_a"
+  } else if(str_detect(name, "-\\d+ \\(UID\\d+\\)$")) {
+    nickname <- str_replace(name, " \\(UID\\d+\\)$", "")
+    nickname <- str_replace_all(nickname, "-", "_")
+  } else {
+    nickname <- name # Default case
+  }
+  
+  # Replace dashes and spaces with underscores for all nicknames
+  nickname <- str_replace_all(nickname, "[- ]", "_")
+  
+  return(nickname)
+}
+
+# Then apply this function to your dataframe
+IMG_names$Nickname <- sapply(IMG_names$Genome_Name_Sample_Name, generateNickname)
+
+# Save the modified dataframe
+write.csv(IMG_names, "IMG_genome_names.csv", row.names = FALSE)
 ```
 
 ## Inspect main downloaded file
@@ -390,4 +432,34 @@ csv_data <- read.csv("3300004581/3300004581.a.cog.csv")
 csv_data_subset <- csv_data[, c("gene_id", "cog_id")]
 data <- merge(data, csv_data_subset, by = "gene_id", all.x = TRUE)
 ```
+## Change genome ID file names to nickname
+
+Rename the folders for each genome to correspond to their nickname
+```{r}
+# Load the CSV file
+data <- read_csv("IMG_genome_names.csv")
+
+# Set the directory path where the folders are located
+folder_directory <- "Lake_Washington_QS"
+
+# Loop through each row in the data
+for(i in 1:nrow(data)) {
+  # The current IMG_Genome_ID and its corresponding Nickname
+  img_id <- as.character(data$IMG_Genome_ID[i])
+  nickname <- as.character(data$Nickname[i])
+  
+  # Construct the current folder name and the new folder name
+  current_folder_path <- file.path(folder_directory, img_id)
+  new_folder_path <- file.path(folder_directory, nickname)
+  
+  # Check if the current folder exists and then rename it
+  if(dir.exists(current_folder_path)) {
+    file.rename(current_folder_path, new_folder_path)
+  }
+}
+
+# Note: This script assumes that the folders you want to rename are directly under 'folder_directory'.
+
+```
+
 
