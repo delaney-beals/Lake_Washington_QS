@@ -1,0 +1,162 @@
+---
+title: "Lake Washington metagenome and metatranscriptome differential expression"
+output: html_notebook
+---
+```{r}
+library(dplyr)
+library(readr)
+```
+
+
+# Differential expression of Acyl-HSL in high oxygen microcosms: week 4 vs. week 14
+For this analysis, we want to look at the QS signal/acyl-HSL synthase expression in week 4 vs. week 14, only looking at the high oxygen microcosms. I'm not yet sure how to take into account the metagenome reads for these genes or if those have already been taken into account. But this is just an exploratory analysis for now. 
+
+## 1) Extract metatranscriptome files
+To extract specific files from a tar archive ("LW_QS_img_data.tar") based on criteria from your IMG_names dataframe, such as only extracting files for samples that are metagenomes, have high oxygen, are from week 4, and have "no" in the SPAdes column, you can follow a multi-step approach in R. This involves filtering the dataframe according to your criteria, generating a list of filenames to extract based on the Genome_ID, and then using system commands to extract only those files from the tar archive.
+
+Filter the IMG_names dataframe based on specified conditions. 
+```{r}
+# Assuming IMG_names is already loaded and contains the necessary columns
+week4_names <- IMG_names %>%
+  filter(type == "metatranscriptome", 
+         oxygen == "high", 
+         time == 4, 
+         SPAdes == "no")
+
+week14_names <- IMG_names %>%
+  filter(type == "metatranscriptome", 
+         oxygen == "high", 
+         time == 14, 
+         SPAdes == "no")
+
+# Generate the filenames to extract based on the filtered Genome_IDs
+week4 <- paste0(week4_names$IMG_Genome_ID, ".tar.gz")
+week14 <- paste0(week14_names$IMG_Genome_ID, ".tar.gz")
+
+# confirm correct files
+week4
+week14
+```
+
+Extract specific files from the tar archive
+```{r}
+# combine lists to extract all files at once
+files_to_extract <- c(week4, week14)
+
+# Set the path to the tar archive
+tar_archive_path <- "LW_QS_img_data.tar"
+
+# Loop through the files to extract and extract them one by one
+for(file_name in files_to_extract) {
+  # Construct the tar command to extract a specific file
+  command <- sprintf("tar -xvf %s %s", tar_archive_path, file_name)
+  
+  # Execute the command
+  system(command)
+}
+```
+
+Extract these files into their respective folders
+```{r}
+# Assuming 'files_to_extract' contains the filtered list of filenames to extract
+for(file_name in files_to_extract) {
+  # Create a directory named after the file (without the .tar.gz extension)
+  dir_name <- sub("\\.tar\\.gz$", "", file_name)
+  dir_path <- paste0(dir_name) # Prepend with a folder name if needed
+  dir.create(dir_path, recursive = TRUE)
+  
+  # Construct the command to extract the .tar.gz file into the created directory
+  command <- sprintf("tar -xzvf %s -C %s", file_name, dir_path)
+  
+  # Execute the command
+  system(command)
+}
+```
+Move the .tar.gz files into the "genomes" sub folder
+```{r}
+# Ensure the "genomes" subfolder exists
+if (!dir.exists("genomes")) {
+  dir.create("genomes")
+}
+
+# Move each specific file to the "genomes" subfolder
+for (file_name in files_to_extract) {
+  file.rename(file_name, file.path("genomes", file_name))
+}
+```
+
+# Inspect pfams
+Want to make sure week 4 and 14 have Pfam00765, which is the acyl-HSL synthase
+```{r}
+# Filter IMG_names for the specified criteria
+filtered_names <- IMG_names %>%
+  filter(type == "metatranscriptome", 
+         oxygen == "high", 
+         (time == 4 | time == 14), 
+         SPAdes == "no")
+
+# Generate file paths for pfam.txt files and map them to Nicknames
+pfam_files <- paste0(filtered_names$IMG_Genome_ID, "/", filtered_names$IMG_Genome_ID, ".a.pfam.txt")
+names(pfam_files) <- filtered_names$IMG_Genome_ID
+
+# Initialize a named list to store dataframes
+pfam_dataframes <- list()
+
+
+# Load each pfam.txt file as a dataframe and name it after the Nickname
+for(i in seq_along(filtered_names$IMG_Genome_ID)) {
+  genome_id <- filtered_names$IMG_Genome_ID[i] # Directly use the IMG_Genome_ID from filtered_names
+  nickname <- filtered_names$Nickname[i] # Get the corresponding nickname for naming the dataframe
+  
+  # Corrected file path to match actual structure without including Nickname
+  file_path <- file.path(genome_id, genome_id, paste0(genome_id, ".a.pfam.txt"))
+  
+  if(file.exists(file_path)) {
+    # Read the pfam.txt file with predefined headers and no column types message
+    df <- read_delim(file_path, delim = "\t", 
+                     col_names = c("gene_id", "pfam_id", "percent_identity", "query_start", 
+                                   "query_end", "subj_start", "subj_end", "evalue", 
+                                   "bit_score", "align_length"), 
+                     skip = 1, show_col_types = FALSE)
+    pfam_dataframes[[nickname]] <- df
+  } else {
+    message("File does not exist: ", file_path)
+  }
+}
+
+MT128_HOW14 <- pfam_dataframes[["MT128_HOW14"]]
+
+```
+
+```{r}
+file.path(genome_id, genome_id, pfam_files[1]) # Adjust based on actual data
+if(file.exists(test_path)) {
+  test_df <- read_delim(test_path, delim = "\t", col_names = c("gene_id", "pfam_id", "percent_identity", "query_start", 
+                                                               "query_end", "subj_start", "subj_end", "evalue", 
+                                                               "bit_score", "align_length"), 
+                        skip = 1)
+  print(head(test_df))
+} else {
+  print(paste("File does not exist:", test_path))
+}
+
+```
+
+
+```{r}
+# Initialize a vector to store the presence of Pfam00765 for each nickname
+pfam_presence <- vector("list", length = length(pfam_dataframes))
+names(pfam_presence) <- names(pfam_dataframes)
+
+# Check each dataframe for Pfam00765
+for (nickname in names(pfam_dataframes)) {
+  df <- pfam_dataframes[[nickname]]
+  # Check if Pfam00765 is present in the pfam_id column
+  pfam_presence[[nickname]] <- any(df$pfam_id == "Pfam00765")
+}
+
+# To see which dataframes contain Pfam00765
+pfam_presence
+
+```
+
