@@ -19,8 +19,9 @@ The "dictionary" is the full names of the experiments I downloaded (as well as t
 
 ```{r}
 # Load the data
-IMG_names <- read.csv("IMG_genome_names_old.csv")
+IMG_names <- read.csv("IMG_genome_names.csv")
 
+# generate nicknames
 generateNickname <- function(name) {
   nickname <- NA_character_ # Default to NA character vector
   
@@ -48,9 +49,30 @@ generateNickname <- function(name) {
 
 # Then apply this function to your dataframe
 IMG_names$Nickname <- sapply(IMG_names$Genome_Name_Sample_Name, generateNickname)
+```
+
+Add additional metadata columns
+```{r}
+# Add new columns: "type", "oxygen", "time", and "SPAdes"
+IMG_names <- IMG_names %>%
+  mutate(
+    type = case_when(
+      str_detect(Nickname, "^MT") ~ "metatranscriptome",
+      str_detect(Nickname, "^MG") ~ "metagenome",
+      TRUE ~ "genome"
+    ),
+    oxygen = case_when(
+      str_detect(Nickname, "_LOW") ~ "low",
+      str_detect(Nickname, "_HOW") ~ "high",
+      TRUE ~ NA_character_
+    ),
+    time = as.numeric(str_extract(Nickname, "(?<=_(LOW|HOW))\\d+")),
+    SPAdes = if_else(str_detect(Nickname, "_sp$"), "SPAdes", "no")
+  )
+
 
 # Save the modified dataframe
-write.csv(IMG_names, "IMG_genome_names.csv", row.names = FALSE)
+write.csv(IMG_names, "IMG_genome_names_metadata.csv", row.names = FALSE)
 ```
 
 ## Inspect main downloaded file
@@ -381,7 +403,7 @@ cogHeaders <- extractHeaders(readme_lines, "cog.txt")
 phyloHeaders <- extractHeaders(readme_lines, "phylodist.txt")
 
 # Print extracted headers to verify
-print(phyloHeaders)
+print(pfamHeaders)
 ```
 Read Files, Assign Headers, and Write CSV
 ```{r}
