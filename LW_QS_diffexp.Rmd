@@ -5,6 +5,8 @@ output: html_notebook
 ```{r}
 library(dplyr)
 library(readr)
+library(tidyr)
+library(tidyverse)
 ```
 
 
@@ -358,41 +360,82 @@ Interesting that we aren't seeing LW13's receptor, since Aaron's paper "Interspe
 I'd like to look at the actual expression levels of these genes, rather than just the presence or absence. 
 
 ## Framework for any additional experiments
+Before extracting additional experiments, check what experiments I have already. 
 ```{r}
-library(dplyr)
-library(readr)
+# Assuming IMG_names is already loaded and contains the necessary columns
 
-# Function to filter IMG_names and generate file paths
-filter_and_generate_file_paths <- function(IMG_names, type, oxygen, times, SPAdes) {
+# List all directories in the current working directory (or specify a path)
+all_folders <- list.dirs(path = ".", full.names = FALSE, recursive = FALSE)
+
+# Filter IMG_names to include only those entries that match the directories found
+matching_entries <- IMG_names %>% filter(IMG_Genome_ID %in% all_folders)
+
+# Create a named vector or list where folder names (genome_id) are mapped to nicknames
+folder_to_nickname <- setNames(matching_entries$Nickname, matching_entries$IMG_Genome_ID)
+
+# Print the mapping or return it for further use
+print(folder_to_nickname)
+```
+
+The following are the functions to perform these data prep steps for any experimental files. Don't change anything in the functions block just below. 
+```{r}
+# function to select which experimental files I want
+filter_and_extract_paths <- function(IMG_names, type_desired, oxygen_desired, weeks, SPAdes_desired) {
   filtered_names <- IMG_names %>%
-    filter(type == type, 
-           oxygen == oxygen, 
-           time %in% times, 
-           SPAdes == SPAdes)
+    filter(
+      (type_desired == "all" | type == type_desired), 
+      (oxygen_desired == "all" | oxygen == oxygen_desired), 
+      time %in% weeks, 
+      (SPAdes_desired == "all" | SPAdes == SPAdes_desired)
+    )
   
-  file_paths <- paste0(filtered_names$IMG_Genome_ID, "/", filtered_names$IMG_Genome_ID, ".a.pfam.txt")
-  names(file_paths) <- filtered_names$IMG_Genome_ID
-  return(file_paths)
+  first_level_paths <- paste0(filtered_names$IMG_Genome_ID, ".tar.gz")
+  return(list(filtered_names = filtered_names, first_level_paths = first_level_paths))
 }
 
-# Function to extract files
-extract_files <- function(file_paths, tar_archive_path) {
-  for(file_name in file_paths) {
+# function to extract those files from the main tar.gz file
+extract_first_level <- function(first_level_paths, tar_archive_path) {
+  for(file_name in first_level_paths) {
     command <- sprintf("tar -xvf %s %s", tar_archive_path, file_name)
     system(command)
   }
 }
 
-# Function to read, merge pfam and phylodist data, and store in a list
-read_and_merge_data <- function(filtered_names, file_type = "pfam") {
+# function to extract individual txt files from each experiment and put them into a folder named after the experiment, then put the experiment .tar.gz into a separate folder
+extract_second_level <- function(filtered_names) {
+    if (!dir.exists("genomes")) {
+    dir.create("genomes")
+  }
+    for(genome_id in filtered_names$IMG_Genome_ID) {
+        original_tar_gz_path <- file.path(paste0(genome_id, ".tar.gz"))
+    new_dir_path <- paste0(genome_id)
+    if (!dir.exists(new_dir_path)) {
+      dir.create(new_dir_path)
+    }
+    if(file.exists(original_tar_gz_path)) {
+    command <- sprintf("tar -xzvf %s -C %s", original_tar_gz_path, new_dir_path)
+      system(command)
+      file.rename(original_tar_gz_path, file.path("genomes", paste0(genome_id, ".tar.gz")))
+    } else {
+      message("File does not exist: ", original_tar_gz_path)
+    }
+  }
+}
+
+# function to load in the pfam and phylodist txt files and give them their correct headers
+load_data_files <- function(filtered_names, file_type) {
   dataframes <- list()
   for(i in seq_along(filtered_names$IMG_Genome_ID)) {
     genome_id <- filtered_names$IMG_Genome_ID[i]
     nickname <- filtered_names$Nickname[i]
     file_path <- file.path(genome_id, genome_id, paste0(genome_id, ".a.", file_type, ".txt"))
-    
     if(file.exists(file_path)) {
-      df <- read_delim(file_path, delim = "\t", col_names = TRUE, skip = 1, show_col_types = FALSE)
+      col_names <- if(file_type == "pfam") {
+        c("gene_id", "pfam_id", "percent_identity", "query_start", "query_end", "subj_start", "subj_end", "evalue", "bit_score", "align_length")
+      } else { # file_type == "phylodist"
+        c("gene_id", "homolog_gene_oid", "homolog_taxon_oid", "percent_identity", "lineage")
+      }
+      df <- read_delim(file_path, delim = "\t", col_names = col_names, skip = 1, show_col_types = FALSE)
       dataframes[[nickname]] <- df
     } else {
       message("File does not exist: ", file_path)
@@ -401,114 +444,34 @@ read_and_merge_data <- function(filtered_names, file_type = "pfam") {
   return(dataframes)
 }
 
-# Function to search for Pfam presence and extract lineages
-search_pfam_and_extract_lineage <- function(dataframes, pfam_id) {
-  pfam_lineages <- list()
-  for(nickname in names(dataframes)) {
-    df <- dataframes[[nickname]]
-    if(pfam_id %in% df$pfam_id) {
-      lineage <- df$lineage[df$pfam_id == pfam_id]
-      pfam_lineages[[nickname]] <- unique(lineage)
+# function to merge the pfam and phylo dist dataframes based on shared gene_ID
+merge_dataframes <- function(pfam_dataframes, phylodist_dataframes) {
+  merged_dataframes <- list()
+  for(nickname in names(pfam_dataframes)) {
+    if(!is.null(pfam_dataframes[[nickname]]) && !is.null(phylodist_dataframes[[nickname]])) {
+      merged_df <- merge(pfam_dataframes[[nickname]], phylodist_dataframes[[nickname]][, c("gene_id", "lineage")], by = "gene_id", all.x = TRUE)
+      merged_dataframes[[nickname]] <- merged_df
     }
   }
-  return(pfam_lineages)
-}
-```
-
-```{r}
-# Example Usage:
-# Assuming IMG_names is loaded and contains necessary columns
-
-# STEP 1
-# Adjust these variables based on your dataset and criteria
-type <- "metatranscriptome"
-oxygen <- "low"
-weeks <- c(6, 9, 14)
-SPAdes <- "no"
-tar_archive_path <- "LW_QS_img_data.tar"  # Make sure this path is correct
-
-# Filter IMG_names and generate pfam file paths
-pfam_file_paths <- filter_and_generate_file_paths(IMG_names, type, oxygen, weeks, SPAdes)
-
-# Similarly, you might generate phylodist file paths if they are different
-# Assuming phylodist files are named similarly and stored in the same way as pfam files
-phylodist_file_paths <- pfam_file_paths  # If the naming convention and storage are the same
-
-# STEP 2
-# Extract pfam files (Assuming they are not already extracted and organized)
-extract_files(pfam_file_paths, tar_archive_path)
-
-# STEP 3
-# Assuming the files are extracted and organized as per the previous steps
-# Load and merge pfam and phylodist dataframes based on the filtered_names
-filtered_names <- IMG_names %>% filter(type == type, oxygen == oxygen, time %in% weeks, SPAdes == SPAdes)
-pfam_data <- read_and_merge_data(filtered_names, "pfam")
-phylodist_data <- read_and_merge_data(filtered_names, "phylodist")
-
-# Merge dataframes
-merged_dataframes <- list()
-for(nickname in names(pfam_data)) {
-  if(!is.null(pfam_data[[nickname]]) && !is.null(phylodist_data[[nickname]])) {
-    merged_df <- merge(pfam_data[[nickname]], phylodist_data[[nickname]][, c("gene_id", "lineage")], by = "gene_id", all.x = TRUE)
-    merged_dataframes[[nickname]] <- merged_df
-  }
-}
-
-# STEP 4
-pfam00765_lineages <- search_pfam_and_extract_lineage(merged_dataframes, "Pfam00765")
-
-# Display the results for lineages of Pfam00765
-pfam00765_lineages
-
-```
-
-```{r}
-filter_and_extract_paths <- function(IMG_names, type, oxygen, weeks, SPAdes) {
-  filtered_names <- IMG_names %>%
-    filter(type == type, 
-           oxygen == oxygen, 
-           time %in% weeks, 
-           SPAdes == SPAdes)
   
-  # Generate paths for the first level of .tar.gz files to extract from the main archive
-  first_level_paths <- paste0(filtered_names$IMG_Genome_ID, ".tar.gz")
-  
-  return(list(filtered_names = filtered_names, first_level_paths = first_level_paths))
+  return(merged_dataframes)
 }
-
-extract_first_level <- function(first_level_paths, tar_archive_path) {
-  for(file_name in first_level_paths) {
-    command <- sprintf("tar -xvf %s %s", tar_archive_path, file_name)
-    system(command)
-  }
-}
-
-extract_second_level <- function(filtered_names) {
-  for(genome_id in filtered_names$IMG_Genome_ID) {
-    dir_path <- paste0(genome_id)  # Directory named after the genome ID
-    tar_gz_path <- file.path(dir_path, paste0(genome_id, ".tar.gz"))
-    
-    if(file.exists(tar_gz_path)) {
-      command <- sprintf("tar -xzvf %s -C %s", tar_gz_path, dir_path)
-      system(command)
-    }
-  }
-}
-
 ```
 
-
-new attempt
+Below is where you can change things:
 ```{r}
-# Example usage for metatranscriptome, low oxygen, weeks 6, 9, 14, no SPAdes
-type <- "metatranscriptome"
-oxygen <- "low"
-weeks <- c(6, 9, 14)
-SPAdes <- "no"
-tar_archive_path <- "LW_QS_img_data.tar"  # Adjust as necessary
+# use "all" when multiple chr variables are desired
+type_desired <- "metatranscriptome"
+oxygen_desired <- "all"
+weeks <- c(6, 9, 14) 
+SPAdes_desired <- "no"
+tar_archive_path <- "LW_QS_img_data.tar"
+```
 
+Run the following commands after specifying which files you want to extract and prep. 
+```{r}
 # Filter and generate paths for first-level extraction
-results <- filter_and_extract_paths(IMG_names, type, oxygen, weeks, SPAdes)
+results <- filter_and_extract_paths(IMG_names, type_desired, oxygen_desired, weeks, SPAdes_desired)
 filtered_names <- results$filtered_names
 first_level_paths <- results$first_level_paths
 
@@ -517,30 +480,33 @@ extract_first_level(first_level_paths, tar_archive_path)
 
 # Extract second level (assuming the first level .tar.gz files are now in their respective directories)
 extract_second_level(filtered_names)
-
 ```
+
+Now all the files are extracted; the following is to merge the pfam and phylodist files into one for each experiment. 
 ```{r}
-# STEP 3
-# Assuming the files are extracted and organized as per the previous steps
 # Load and merge pfam and phylodist dataframes based on the filtered_names
-filtered_names <- IMG_names %>% filter(type == type, oxygen == oxygen, time %in% weeks, SPAdes == SPAdes)
-pfam_data <- read_and_merge_data(filtered_names, "pfam")
-phylodist_data <- read_and_merge_data(filtered_names, "phylodist")
+results <- filter_and_extract_paths(IMG_names, type_desired, oxygen_desired, weeks, SPAdes_desired)
+filtered_names <- results$filtered_names
 
-# Merge dataframes
-merged_dataframes <- list()
-for(nickname in names(pfam_data)) {
-  if(!is.null(pfam_data[[nickname]]) && !is.null(phylodist_data[[nickname]])) {
-    merged_df <- merge(pfam_data[[nickname]], phylodist_data[[nickname]][, c("gene_id", "lineage")], by = "gene_id", all.x = TRUE)
-    merged_dataframes[[nickname]] <- merged_df
-  }
-}
+# load pfam and phylodist files
+pfam_dataframes <- load_data_files(filtered_names, "pfam")
+phylodist_dataframes <- load_data_files(filtered_names, "phylodist")
+merged_dataframes <- merge_dataframes(pfam_dataframes, phylodist_dataframes)
 
-# STEP 4
+# check on an individual dataframe instead of previewing all of them
+MT61_LOW9 <- merged_dataframes[["MT61_LOW9"]]
+```
+
+Look for specific pfams
+```{r}
+# CHECK FOR SPECIFIC PFAMS
 pfam00765_lineages <- search_pfam_and_extract_lineage(merged_dataframes, "pfam00765")
 
-# Display the results for lineages of Pfam00765
-pfam00765_lineages
-
+# make it a dataframe
+pfam00765_df <- pfam00765_lineages %>%
+  enframe(name = "nickname", value = "lineage") %>%
+  unnest(lineage)
 ```
+
+
 
