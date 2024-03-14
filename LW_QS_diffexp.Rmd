@@ -9,6 +9,9 @@ library(tidyr)
 library(tidyverse)
 ```
 
+```{r}
+IMG_names <- read_csv("IMG_genome_names_metadata.csv")
+```
 
 # Differential expression of Acyl-HSL in high oxygen microcosms: week 4 vs. week 14
 For this analysis, we want to look at the QS signal/acyl-HSL synthase expression in week 4 vs. week 14, only looking at the high oxygen microcosms. I'm not yet sure how to take into account the metagenome reads for these genes or if those have already been taken into account. But this is just an exploratory analysis for now. 
@@ -359,7 +362,7 @@ pfam03472_lineages
 Interesting that we aren't seeing LW13's receptor, since Aaron's paper "Interspecies chemical signaling in a methane oxidizing bacterial community" talks about the orphan receptor of 3OHC10 that LW13 has which is active in coculture with M. tundripaludum 21/22. Maybe instead I need to look at genes that are reported to be controlled by LW13's mmsR (QS receptor), rather than the gene itself. 
 I'd like to look at the actual expression levels of these genes, rather than just the presence or absence. 
 
-## Framework for any additional experiments
+# Framework for any additional experiments
 Before extracting additional experiments, check what experiments I have already. 
 ```{r}
 # Assuming IMG_names is already loaded and contains the necessary columns
@@ -495,18 +498,106 @@ merged_dataframes <- merge_dataframes(pfam_dataframes, phylodist_dataframes)
 
 # check on an individual dataframe instead of previewing all of them
 MT61_LOW9 <- merged_dataframes[["MT61_LOW9"]]
+
+# make a new folder and save these dataframes as csv
+if (!dir.exists("expression")) {
+  dir.create("expression")
+}
+
+# Iterate over the merged_dataframes list to save each dataframe as a CSV
+for (nickname in names(merged_dataframes)) {
+  file_path <- paste0("expression/", nickname, ".csv")
+  write.csv(merged_dataframes[[nickname]], file_path, row.names = FALSE)
+}
 ```
+
 
 Look for specific pfams
 ```{r}
+# Function to search for Pfam presence and extract lineages
+search_pfam_and_extract_lineage <- function(dataframes, pfam_id) {
+  pfam_lineages <- list()
+  for(nickname in names(dataframes)) {
+    df <- dataframes[[nickname]]
+    if(pfam_id %in% df$pfam_id) {
+      lineage <- df$lineage[df$pfam_id == pfam_id]
+      pfam_lineages[[nickname]] <- unique(lineage)
+    }
+  }
+  return(pfam_lineages)
+}
+
 # CHECK FOR SPECIFIC PFAMS
 pfam00765_lineages <- search_pfam_and_extract_lineage(merged_dataframes, "pfam00765")
+pfam03472_lineages <- search_pfam_and_extract_lineage(merged_dataframes, "pfam03472")
 
 # make it a dataframe
 pfam00765_df <- pfam00765_lineages %>%
   enframe(name = "nickname", value = "lineage") %>%
   unnest(lineage)
+
+pfam03472_df <- pfam03472_lineages %>%
+  enframe(name = "nickname", value = "lineage") %>%
+  unnest(lineage)
 ```
 
+# Expression with different reference genomes
+If I want to look at expression of pfam0075, for example, how would I do that? If I know an experiment has at least one pfam detected in the metatranscriptome, I'm not sure the best way to look at the expression. Should I use the values from the metagenome? Or use the values from the genome of the bacteria of interest? 
 
+I will look at MT128_HOW14 and download the RNAseq expression data from IMG where Acidovorax radicis N35 is the reference genome (Gp0111238) and also the RNAseq expression data where Freshwater sediment methanotrophic microbial communities from Lake Washington under simulated oxygen tension - Sediment Metagenome 128_HOW14 (Gp0111238) is the reference genome. I will also look at the reference genome that is called "Metatranscriptome metagenome". Seems like this last one is the only way I can get the gene_IDs to line up. But what are the *actual* differences in the reference genomes, particularly the "metagenome" and the "metatranscriptome"?? 
+
+https://img.jgi.doe.gov/cgi-bin/mer/main.cgi?section=RNAStudies&page=samplesByProposal&proposal=Freshwater%20sediment%20methanotrophic%20microbial%20communities%20from%20Lake%20Washington%20under%20simulated%20oxygen%20tension&domain=&genomes=180
+
+```{r}
+# Path to RNA seq data files
+MT128_HOW14_Acidovorax <- "expression/rnaseq_MT128_HOW14_Acidovorax.csv"
+MT128_HOW14_metagenome <- "expression/rnaseq_MT128_HOW14_metagenome.csv"
+MT128_HOW14_mtx <- "expression/rnaseq_MT128_HOW14_mtx.csv"
+
+# Reading the data
+data <- read.delim(filePath, header = TRUE, stringsAsFactors = FALSE, row.names = "LOCUS.TAG")
+
+data <- separate(data, GENE.ID, into = c("STUDY.ID", "ASSEMBLED", "gene_id"), sep = " ", extra = "merge", fill = "right")
+```
+
+```{r}
+# function to load RNAseq file and separate the columns properly
+load_and_process_RNAseq_csv <- function(file_paths) {
+  processed_dataframes <- list()
+  for (filePath in file_paths) {
+    data <- read.delim(filePath, header = TRUE, stringsAsFactors = FALSE, row.names = "LOCUS.TAG")
+    data <- separate(data, GENE.ID, into = c("STUDY.ID", "ASSEMBLED", "gene_id"), sep = " ", extra = "merge", fill = "right")
+    base_name <- tools::file_path_sans_ext(basename(filePath))
+    processed_dataframes[[base_name]] <- data
+  }
+  return(processed_dataframes)
+}
+```
+
+```{r}
+# Specifying file paths of RNAseq files I want to load into R
+file_paths <- c(
+  "expression/rnaseq_MT128_HOW14_Acidovorax.csv",
+  "expression/rnaseq_MT128_HOW14_metagenome.csv",  
+  "expression/rnaseq_MT128_HOW14_mtx.csv")
+
+# Using the function to load and process the CSV files
+processed_dataframes <- load_and_process_RNAseq_csv(file_paths)
+
+# Accessing a specific dataframe, e.g., MT128_HOW14_Acidovorax
+MT128_HOW14_Acidovorax_df <- processed_dataframes[["rnaseq_MT128_HOW14_Acidovorax"]]
+MT128_HOW14_metagenome_df <- processed_dataframes[["rnaseq_MT128_HOW14_metagenome"]]
+MT128_HOW14_mtx_df <- processed_dataframes[["rnaseq_MT128_HOW14_mtx"]]
+```
+
+Combine the RNAseq dataframe with the pfam and lineage csv we made earlier. 
+```{r}
+MT128_HOW14_df <- read.csv("expression/MT128_HOW14.csv", stringsAsFactors = FALSE)
+
+MT128_HOW14_mtx_merged <- merge(MT128_HOW14_mtx_df, MT128_HOW14_df, by = "gene_id")
+
+
+MT128_HOW14_mtx_merged_left <- left_join(MT128_HOW14_mtx_df, MT128_HOW14_df, by = "gene_id")
+
+```
 
