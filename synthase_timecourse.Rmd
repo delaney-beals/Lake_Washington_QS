@@ -1,0 +1,45 @@
+---
+title: "Synthase expression time course"
+output: html_notebook
+---
+
+# Synthase expression time course
+I want to make a plot where time in weeks is on the  x axis and pfam00765 presence or absence is on the y axis. I will use the metatranscriptomes from each week aligned to the 31/32 and Acidovorax
+
+Starting small with just a few metatranscriptomes...
+need to download RNAseq files from IMG
+```{r}
+# function to load RNAseq file and separate the columns properly
+load_and_process_RNAseq_csv <- function(file_paths) {
+  processed_dataframes <- list()
+  for (filePath in file_paths) {
+    data <- read.delim(filePath, header = TRUE, stringsAsFactors = FALSE, row.names = "LOCUS.TAG")
+    data <- separate(data, GENE.ID, into = c("STUDY.ID", "ASSEMBLED", "gene_id"), sep = " ", extra = "merge", fill = "right")
+    base_name <- tools::file_path_sans_ext(basename(filePath))
+    processed_dataframes[[base_name]] <- data
+  }
+  return(processed_dataframes)
+}
+```
+Want to apply this function to everything in the acidovorax_MTX folder that contains RNAseq/metatranscriptome data for samples aligned to the Acidovorax genome. 
+```{r}
+# Automatically identifying file paths of RNAseq files in the acidovorax_MT folder
+folder_path <- "acidovorax_MTX/" # Ensure this path is correct
+file_paths <- list.files(path = folder_path, pattern = "\\.csv$", full.names = TRUE)
+
+# Using the function to load and process the CSV files
+processed_dataframes <- load_and_process_RNAseq_csv(file_paths)
+
+
+# Combine all processed dataframes into one, adding a 'SourceFile' column to each
+combined_df <- do.call(rbind, lapply(names(processed_dataframes), function(name) {
+  df <- processed_dataframes[[name]]
+  df$SourceFile <- name
+  return(df)
+}))
+
+
+# to make an individual dataframe
+MT33_HOW06_Acidovorax_dfx <- processed_dataframes[["rnaseq_MT33_HOW06_Acidovorax"]]
+```
+
