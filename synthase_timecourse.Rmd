@@ -4,10 +4,71 @@ output: html_notebook
 ---
 
 # Synthase expression time course
-I want to make a plot where time in weeks is on the  x axis and pfam00765 presence or absence is on the y axis. I will use the metatranscriptomes from each week aligned to the 31/32 and Acidovorax
+I want to make a plot where time in weeks is on the  x axis and pfam00765 presence or absence is on the y axis. I will use the metatranscriptomes from each week aligned to the 31/32 and Acidovorax. 
 
-Starting small with just a few metatranscriptomes...
-need to download RNAseq files from IMG
+Go to IMG/JGI, then OMICS > RNAseq, search for "Lake Washington" and select the number link under the "Total RNA seq data sets tab" in the row corresponding to the study: "Freshwater sediment methanotrophic microbial communities from Lake Washington under simulated oxygen tension" (will be 963 or so studies).
+
+I am only interested in the metatranscriptome data sets aligned to either Acidovorax or M. tundripaludum 31/32, so I will sort all the data sets by filtering the column based on one of these reference data sets. Then click "Select All" and go to the "Multiple sample analysis" tab in gray on the same page. Then keep all of the standard parameters and click "Gene expression summary". Then "Select All" rows in the resulting table and Export. Copy and paste the results from the downloaded text file into excel to save as a csv or xlxs file. Open that file.
+
+Search for "homoserine lactone" and in the "Gene product" column. Save the rows that correspond to these genes and save them in a new xlxs and transpose them so study names are the row names and coverage is the value. The experimental data is saved in the long title names for each row and is not easy to sort, so we will make new columns in our table that pulls out the metadata for each sample. 
+
+```{r}
+library(dplyr)
+library(ggplot2)
+```
+
+
+```{r}
+# Load the data
+coverage <- read.csv("31-32_MTX_pfam0765_coverage.csv")
+
+# generate nicknames
+generateNickname <- function(name) {
+  nickname <- NA_character_ # Default to NA character vector
+  
+  if(str_detect(name, "Sediment Metatranscriptome")) {
+    matches <- str_match(name, "Sediment Metatranscriptome (\\d+)_([A-Z0-9]+)")
+    nickname <- paste0("MT", matches[,2], "_", matches[,3])
+    if(str_detect(name, "Raw Count")) nickname <- paste0(nickname, "_rc")
+  } else {
+    nickname <- name # Default case
+  }
+  
+  # Replace dashes and spaces with underscores for all nicknames
+  nickname <- str_replace_all(nickname, "[- ]", "_")
+  
+  return(nickname)
+}
+
+# Then apply this function to your dataframe
+coverage$Nickname <- sapply(coverage$sample, generateNickname)
+
+# Add new columns: "sample_ID", "starting_oxygen", "week", "raw_count"
+coverage <- coverage %>%
+  mutate(
+    sample_ID = as.numeric(str_extract(Nickname, "(?<=(MT))\\d+")), 
+    starting_oxygen = case_when(
+      str_detect(Nickname, "_LOW") ~ "low",
+      str_detect(Nickname, "_HOW") ~ "high",
+      TRUE ~ NA_character_), 
+    week = as.numeric(str_extract(Nickname, "(?<=_(LOW|HOW))\\d+")), 
+    raw_count = if_else(str_detect(Nickname, "_rc$"), "raw count", "normalized coverage")
+    )
+
+# Save the modified dataframe
+write.csv(coverage, "31-32_MTX_pfam0765_coverage_metadata.csv", row.names = FALSE)
+```
+Okay now my dataframe looks good and I can organize everything by the experimental details. 
+Let's make a plot of the normalized coverage of pfam0765 (homoserine lactone synthetase) over time for metatranscriptome datasets aligned to the 31/32 genome. 
+
+```{r}
+ggplot(coverage, aes(x=week, y=coverage)) +
+  geom_line() + 
+  xlab("")
+```
+
+
+Once downloaded and in the correct folder, we need to clean up the files: 
 ```{r}
 # function to load RNAseq file and separate the columns properly
 load_and_process_RNAseq_csv <- function(file_paths) {
