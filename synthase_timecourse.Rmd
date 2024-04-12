@@ -16,7 +16,9 @@ Search for "homoserine lactone" and in the "Gene product" column. Save the rows 
 library(dplyr)
 library(tidyr)
 library(ggplot2)
+library(stringr)
 ```
+
 ```{r}
 # for editing theme
 my_theme <- theme_bw() +
@@ -64,22 +66,21 @@ coverage <- coverage %>%
       str_detect(Nickname, "_HOW") ~ "high",
       TRUE ~ NA_character_), 
     week = as.numeric(str_extract(Nickname, "(?<=_(LOW|HOW))\\d+")), 
-    raw_count = if_else(str_detect(Nickname, "_rc$"), "raw count", "normalized coverage")
+    raw_count = if_else(str_detect(Nickname, "_rc$"), "raw count", "normalized coverage"), 
+    genome = "31-32"
     )
-
-# Save the modified dataframe
-write.csv(coverage, "31-32_MTX_pfam0765_coverage_metadata.csv", row.names = FALSE)
 ```
+
+```{r}
+# Save the modified dataframe
+write.csv(coverage, "31-32_MTX_pfam0765_coverage_metadata.csv", row.names = TRUE)
+```
+
 Okay now my dataframe looks good and I can organize everything by the experimental details. 
 Let's make a plot of the normalized coverage of pfam0765 (homoserine lactone synthetase) over time for metatranscriptome datasets aligned to the 31/32 genome. 
 
 ```{r}
-ggplot(coverage, aes(x=week, y=coverage)) +
-  geom_line() + 
-  xlab("")
-
 # separate raw couts from normalized coverage
-
 raw <- coverage %>% 
   filter(grepl("raw count", raw_count, fixed = TRUE))
 
@@ -96,12 +97,14 @@ LOW <- norm %>%
 # Calculate averages for each week for the HOW data
 HOW_avg <- HOW %>%
   group_by(week) %>%
-  summarise(average_coverage = mean(coverage, na.rm = TRUE)) # Compute mean, ignoring NA values
+  summarise(average_coverage = mean(coverage, na.rm = TRUE))  %>%  
+  mutate(genome = "31-32") 
 
 # Calculate averages for each week for the LOW data
 LOW_avg <- LOW %>%
   group_by(week) %>%
-  summarise(average_coverage = mean(coverage, na.rm = TRUE))
+  summarise(average_coverage = mean(coverage, na.rm = TRUE)) %>%  
+  mutate(genome = "31-32") 
 
 # Plot points and add average lines
 ggplot() + 
@@ -113,7 +116,7 @@ ggplot() +
   ylab('coverage') +
   scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14)) +
   scale_color_manual(values = c("HOW" = "red", "LOW" = "blue"),
-                     name = "Dataset",  # Legend title
+                     name = "31/32",  # Legend title
                      labels = c("HOW" = "High initial oxygen", "LOW" = "Low initial oxygen")) +
   geom_vline(xintercept = c(10.5)) +
   my_theme
@@ -122,6 +125,1129 @@ For 31/32, the high initial oxygen samples had very low expression of the homose
  
 
 
+Now do this same process for Acidovorax and the "autoinducer synthase" product.
+
+```{r}
+# Load the data
+coverage_acido <- read.csv("acidovorax_MT_synthase_coverage.csv")
+
+# generate nicknames
+generateNickname <- function(name) {
+  nickname <- NA_character_ # Default to NA character vector
+  
+  if(str_detect(name, "Sediment Metatranscriptome")) {
+    matches <- str_match(name, "Sediment Metatranscriptome (\\d+)_([A-Z0-9]+)")
+    nickname <- paste0("MT", matches[,2], "_", matches[,3])
+    if(str_detect(name, "Raw Count")) nickname <- paste0(nickname, "_rc")
+  } else {
+    nickname <- name # Default case
+  }
+  
+  # Replace dashes and spaces with underscores for all nicknames
+  nickname <- str_replace_all(nickname, "[- ]", "_")
+  
+  return(nickname)
+}
+
+# Then apply this function to your dataframe
+coverage_acido$Nickname <- sapply(coverage_acido$sample, generateNickname)
+
+# Add new columns: "sample_ID", "starting_oxygen", "week", "raw_count"
+coverage_acido <- coverage_acido %>%
+  mutate(
+    sample_ID = as.numeric(str_extract(Nickname, "(?<=(MT))\\d+")), 
+    starting_oxygen = case_when(
+      str_detect(Nickname, "_LOW") ~ "low",
+      str_detect(Nickname, "_HOW") ~ "high",
+      TRUE ~ NA_character_), 
+    week = as.numeric(str_extract(Nickname, "(?<=_(LOW|HOW))\\d+")), 
+    raw_count = if_else(str_detect(Nickname, "_rc$"), "raw count", "normalized coverage"), 
+    genome = "Acidovorax"
+    )
+```
+
+```{r}
+# Save the modified dataframe
+write.csv(coverage_acido, "acidovorax_MTX_syntase_coverage_metadata.csv", row.names = TRUE)
+```
+
+Plotting Acidovorax autoinducer synthase expression time course: 
+```{r}
+# separate raw couts from normalized coverage
+raw_a <- coverage_acido %>% 
+  filter(grepl("raw count", raw_count, fixed = TRUE))
+
+norm_a <- coverage_acido %>% 
+  filter(grepl("normalized coverage", raw_count, fixed = TRUE))
+
+# within the normalized coverage data, separate high and low oxygen conditions
+HOW_a <- norm_a %>% 
+  filter(grepl("high", starting_oxygen, fixed = TRUE))
+# Convert coverage to numeric 
+HOW_a$coverage <- as.numeric(as.character(HOW_a$coverage))
+
+
+LOW_a <- norm_a %>% 
+  filter(grepl("low", starting_oxygen, fixed = TRUE))
+# Convert coverage to numeric if it's not already
+LOW_a$coverage <- as.numeric(as.character(LOW_a$coverage))
+
+
+# Calculate averages for each week for the HOW data
+HOW_avg_a <- HOW_a %>%
+  group_by(week) %>%
+  summarise(average_coverage = mean(coverage)) %>%  
+  mutate(genome = "Acidovorax") 
+
+# Calculate averages for each week for the LOW data
+LOW_avg_a <- LOW_a %>%
+  group_by(week) %>%
+  summarise(average_coverage = mean(coverage, na.rm = TRUE))  %>%  
+  mutate(genome = "Acidovorax") 
+
+# plot just the points 
+ggplot() + 
+  geom_point(data = HOW_a, aes(x = week, y = coverage, color = "HOW"), size = 2) +
+  geom_point(data = LOW_a, aes(x = week, y = coverage, color = "LOW"), size = 2) +
+  xlab('week') +
+  ylab('coverage') +
+  scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14)) +
+  scale_color_manual(values = c("HOW" = "red", "LOW" = "blue"),
+                     name = "Acidovorax",  # Legend title
+                     labels = c("HOW" = "High initial oxygen", "LOW" = "Low initial oxygen")) +
+  geom_vline(xintercept = c(10.5)) +
+  my_theme
+
+# Plot points and add average lines
+ggplot() + 
+  geom_point(data = HOW_a, aes(x = week, y = coverage, color = "HOW"), size = 2) +
+  geom_point(data = LOW_a, aes(x = week, y = coverage, color = "LOW"), size = 2) +
+  geom_line(data = HOW_avg_a, aes(x = week, y = average_coverage, color = "HOW"), linewidth = 1) + 
+  geom_line(data = LOW_avg_a, aes(x = week, y = average_coverage, color = "LOW"), linewidth = 1) +
+  xlab('week') +
+  ylab('coverage') +
+  scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14)) +
+  scale_color_manual(values = c("HOW" = "red", "LOW" = "blue"),
+                     name = "Acidovorax",  # Legend title
+                     labels = c("HOW" = "High initial oxygen", "LOW" = "Low initial oxygen")) +
+  geom_vline(xintercept = c(10.5)) +
+  my_theme
+```
+For Acidovorax, in the low oxygen conditions, there were only three individual samples that had any expression greater than 0: MT2_LOW4, MT28_LOW6, and MT97_LOW12. In high oxygen samples, there were more replicates that had expression of the synthase, but it was still less than half of all replicates. 
+
+
+Want to combine the 31/32 and Acidovorax average expressions:
+```{r}
+ggplot() + 
+  geom_line(data = HOW_avg_a, aes(x = week, y = average_coverage, color = "HOW_a"), linetype = "dotted", size = 1) +
+  geom_line(data = LOW_avg_a, aes(x = week, y = average_coverage, color = "LOW_a"), linetype = "dotted", size = 1) +
+  geom_line(data = HOW_avg, aes(x = week, y = average_coverage, color = "HOW"), size = 1) +
+  geom_line(data = LOW_avg, aes(x = week, y = average_coverage, color = "LOW"), size = 1) +
+  xlab('week') +
+  ylab('coverage') +
+  scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14)) +
+  scale_color_manual(values = c("HOW_a"= "red","LOW_a" = "blue","HOW" = "red", "LOW" = "blue"),
+                     name = "Initial oxygen tension and strain",  
+                     labels = c("HOW_a"= "High O2: Acidovorax","LOW_a"= "Low O2: Acidovorax","HOW" = "High O2: 31/32", "LOW" = "Low O2: 31/32")) +
+  geom_vline(xintercept = c(10.5)) +
+  my_theme
+
+#log(average coverage)
+ggplot() + 
+  geom_line(data = HOW_avg_a, aes(x = week, y = log(average_coverage), color = "HOW_a"), linetype = "dotted", size = 1) +
+  geom_line(data = LOW_avg_a, aes(x = week, y = log(average_coverage), color = "LOW_a"), linetype = "dotted", size = 1) +
+  geom_line(data = HOW_avg, aes(x = week, y = log(average_coverage), color = "HOW"), size = 1) +
+  geom_line(data = LOW_avg, aes(x = week, y = log(average_coverage), color = "LOW"), size = 1) +
+  xlab('week') +
+  ylab('log(coverage)') +
+  scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14)) +
+  scale_color_manual(values = c("HOW_a"= "red","LOW_a" = "blue","HOW" = "red", "LOW" = "blue"),
+                     name = "Initial oxygen tension and strain",  
+                     labels = c("HOW_a"= "High O2: Acidovorax","LOW_a"= "Low O2: Acidovorax","HOW" = "High O2: 31/32", "LOW" = "Low O2: 31/32")) +
+  geom_vline(xintercept = c(10.5)) +
+  my_theme
+```
+
+
+## Normalize 31/32 to RpoS
+There's not an obvious pattern between the acidovorax and the 31/32 synthase expression, so let's normalize each to a housekeeping gene and do the comparison again. 
+
+```{r}
+# Load the data and remove the first two columns
+coverage <- read.csv("31-32_MTX_coverage.csv", row.names = 1)[, -c(1, 2)]
+
+# Capture original row and column names
+original_row_names <- rownames(coverage)
+original_column_names <- colnames(coverage)
+
+# Convert all data to numeric
+coverage[] <- lapply(coverage, function(x) as.numeric(as.character(x)))
+
+# Extract and check the normalization row
+normalization_values <- as.numeric(coverage["2574194336", ])
+normalization_values <- unlist(normalization_values)  # Convert list to vector
+
+# Normalize each column
+normalized_df <- sapply(seq_along(coverage), function(i) coverage[,i] / normalization_values[i])
+normalized_df <- as.data.frame(normalized_df)
+
+# Reassign the original row and column names
+rownames(normalized_df) <- original_row_names
+colnames(normalized_df) <- original_column_names
+```
+
+```{r}
+# Save the modified dataframe
+write.csv(normalized_df, "31-32_MTX_coverage_rpoS_normalized.csv", row.names = TRUE)
+```
+
+### 31/32 synthase time course
+```{r}
+# Load the data
+coverage <- read.csv("31-32_MTX_pfam0765_normalized_coverage.csv")
+
+# replace . with _
+coverage$sample <- gsub("\\.", "_", coverage$sample)
+
+# generate nicknames
+generateNickname <- function(name) {
+  nickname <- NA_character_ 
+  if(str_detect(name, "Sediment_Metatranscriptome")) {
+    matches <- str_match(name, "Sediment_Metatranscriptome_(\\d+)_([A-Z]+\\d*)")
+    nickname <- paste0("MT", matches[,2], "_", matches[,3])
+    if(str_detect(name, "Raw_Count")) nickname <- paste0(nickname, "_rc")
+  } else {
+    nickname <- name 
+    }
+  nickname <- str_replace_all(nickname, "[- ]", "_")
+  return(nickname)
+}
+
+# Then apply this function to your dataframe
+coverage$Nickname <- sapply(coverage$sample, generateNickname)
+
+# Add new columns: "sample_ID", "starting_oxygen", "week", "raw_count"
+coverage <- coverage %>%
+  mutate(
+    sample_ID = as.numeric(str_extract(Nickname, "(?<=(MT))\\d+")), 
+    starting_oxygen = case_when(
+      str_detect(Nickname, "_LOW") ~ "low",
+      str_detect(Nickname, "_HOW") ~ "high",
+      TRUE ~ NA_character_), 
+    week = as.numeric(str_extract(Nickname, "(?<=_(LOW|HOW))\\d+")), 
+    raw_count = if_else(str_detect(Nickname, "_rc$"), "raw count", "normalized coverage"), 
+    genome = "31-32"
+    )
+```
+
+```{r}
+# Save the modified dataframe
+write.csv(coverage, "31-32_MTX_pfam0765_coverage_metadata_normalized.csv", row.names = TRUE)
+```
+
+Okay now my dataframe looks good and I can organize everything by the experimental details. 
+Let's make a plot of the normalized coverage of pfam0765 (homoserine lactone synthetase) over time for metatranscriptome datasets aligned to the 31/32 genome. 
+
+```{r}
+# separate raw couts from normalized coverage
+raw <- coverage %>% 
+  filter(grepl("raw count", raw_count, fixed = TRUE))
+
+norm <- coverage %>% 
+  filter(grepl("normalized coverage", raw_count, fixed = TRUE))
+
+# within the normalized coverage data, separate high and low oxygen conditions
+HOW <- norm %>% 
+  filter(grepl("high", starting_oxygen, fixed = TRUE))
+
+LOW <- norm %>% 
+  filter(grepl("low", starting_oxygen, fixed = TRUE))
+
+# Calculate averages for each week for the HOW data
+HOW_avg <- HOW %>%
+  group_by(week) %>%
+  summarise(average_coverage = mean(coverage, na.rm = TRUE))  %>%  
+  mutate(genome = "31-32") 
+
+# Calculate averages for each week for the LOW data
+LOW_avg <- LOW %>%
+  group_by(week) %>%
+  summarise(average_coverage = mean(coverage, na.rm = TRUE)) %>%  
+  mutate(genome = "31-32") 
+
+# Plot points and add average lines
+ggplot() + 
+  geom_point(data = HOW, aes(x = week, y = coverage, color = "HOW"), size = 2) +
+  geom_point(data = LOW, aes(x = week, y = coverage, color = "LOW"), size = 2) +
+  geom_line(data = HOW_avg, aes(x = week, y = average_coverage, color = "HOW"), linewidth = 1) + 
+  geom_line(data = LOW_avg, aes(x = week, y = average_coverage, color = "LOW"), linewidth = 1) +
+  xlab('week') +
+  ylab('Coverage normalized to rpoS abundance') +
+  scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14)) +
+  scale_color_manual(values = c("HOW" = "red", "LOW" = "blue"),
+                     name = "31/32",  # Legend title
+                     labels = c("HOW" = "High initial oxygen", "LOW" = "Low initial oxygen")) +
+  geom_vline(xintercept = c(10.5)) +
+  my_theme
+```
+### 31/32 synthase time course (raw counts)
+```{r}
+# Load the data
+coverage <- read.csv("31-32_MTX_pfam0765_coverage_metadata_normalized.csv")
+```
+
+
+```{r}
+# separate raw couts from normalized coverage
+raw <- coverage %>% 
+  filter(grepl("raw count", raw_count, fixed = TRUE))
+
+norm <- coverage %>% 
+  filter(grepl("normalized coverage", raw_count, fixed = TRUE))
+
+# within the normalized coverage data, separate high and low oxygen conditions
+HOW <- raw %>% 
+  filter(grepl("high", starting_oxygen, fixed = TRUE))
+
+LOW <- raw %>% 
+  filter(grepl("low", starting_oxygen, fixed = TRUE))
+
+# Calculate averages for each week for the HOW data
+HOW_avg <- HOW %>%
+  group_by(week) %>%
+  summarise(average_coverage = mean(coverage, na.rm = TRUE))  %>%  
+  mutate(genome = "31-32") 
+
+# Calculate averages for each week for the LOW data
+LOW_avg <- LOW %>%
+  group_by(week) %>%
+  summarise(average_coverage = mean(coverage, na.rm = TRUE)) %>%  
+  mutate(genome = "31-32") 
+
+# Plot points and add average lines
+ggplot() + 
+  geom_point(data = HOW, aes(x = week, y = coverage, color = "HOW"), size = 2) +
+  geom_point(data = LOW, aes(x = week, y = coverage, color = "LOW"), size = 2) +
+  geom_line(data = HOW_avg, aes(x = week, y = average_coverage, color = "HOW"), linewidth = 1) + 
+  geom_line(data = LOW_avg, aes(x = week, y = average_coverage, color = "LOW"), linewidth = 1) +
+  xlab('week') +
+  ylab('Raw counts normalized to rpoS abundance') +
+  scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14)) +
+  scale_color_manual(values = c("HOW" = "red", "LOW" = "blue"),
+                     name = "31/32",  # Legend title
+                     labels = c("HOW" = "High initial oxygen", "LOW" = "Low initial oxygen")) +
+  geom_vline(xintercept = c(10.5)) +
+  my_theme
+```
+
+## Normalize Acidovorax to RpoD
+There's not an obvious pattern between the acidovorax and the 31/32 synthase expression, so let's normalize each to a housekeeping gene and do the comparison again. 
+
+```{r}
+# Load the data and remove the first two columns
+coverage <- read.csv("acidovorax_MTX_coverage.csv", row.names = 1)[, -c(1, 2)]
+
+# Capture original row and column names
+original_row_names <- rownames(coverage)
+original_column_names <- colnames(coverage)
+
+# Convert all data to numeric
+coverage[] <- lapply(coverage, function(x) as.numeric(as.character(x)))
+
+# Extract and check the normalization row
+normalization_values <- as.numeric(coverage["2548500212", ])
+normalization_values <- unlist(normalization_values)  # Convert list to vector
+
+# Normalize each column
+normalized_df <- sapply(seq_along(coverage), function(i) coverage[,i] / normalization_values[i])
+normalized_df <- as.data.frame(normalized_df)
+
+# Reassign the original row and column names
+rownames(normalized_df) <- original_row_names
+colnames(normalized_df) <- original_column_names
+```
+
+```{r}
+# Save the modified dataframe
+write.csv(normalized_df, "acidovorax_MTX_coverage_rpoD_normalized.csv", row.names = TRUE)
+```
+
+### Acidovorax synthase time course
+```{r}
+# Load the data
+coverage_acido <- read.csv("acidovorax_MTX_synthase_coverage_normalized.csv")
+
+# replace . with _
+coverage_acido$sample <- gsub("\\.", "_", coverage_acido$sample)
+
+# generate nicknames
+generateNickname <- function(name) {
+  nickname <- NA_character_ 
+  if(str_detect(name, "Sediment_Metatranscriptome")) {
+    matches <- str_match(name, "Sediment_Metatranscriptome_(\\d+)_([A-Z]+\\d*)")
+    nickname <- paste0("MT", matches[,2], "_", matches[,3])
+    if(str_detect(name, "Raw_Count")) nickname <- paste0(nickname, "_rc")
+  } else {
+    nickname <- name 
+    }
+  nickname <- str_replace_all(nickname, "[- ]", "_")
+  return(nickname)
+}
+
+# Then apply this function to your dataframe
+coverage_acido$Nickname <- sapply(coverage_acido$sample, generateNickname)
+
+# Add new columns: "sample_ID", "starting_oxygen", "week", "raw_count"
+coverage_acido <- coverage_acido %>%
+  mutate(
+    sample_ID = as.numeric(str_extract(Nickname, "(?<=(MT))\\d+")), 
+    starting_oxygen = case_when(
+      str_detect(Nickname, "_LOW") ~ "low",
+      str_detect(Nickname, "_HOW") ~ "high",
+      TRUE ~ NA_character_), 
+    week = as.numeric(str_extract(Nickname, "(?<=_(LOW|HOW))\\d+")), 
+    raw_count = if_else(str_detect(Nickname, "_rc$"), "raw count", "normalized coverage"), 
+    genome = "Acidovorax"
+    )
+```
+
+```{r}
+# Save the modified dataframe
+write.csv(coverage_acido, "acidovorax_MTX_synthase_coverage_normalized_metadata.csv", row.names = TRUE)
+```
+
+Plotting Acidovorax autoinducer synthase expression time course: 
+```{r}
+# separate raw couts from normalized coverage
+raw_a <- coverage_acido %>% 
+  filter(grepl("raw count", raw_count, fixed = TRUE))
+
+norm_a <- coverage_acido %>% 
+  filter(grepl("normalized coverage", raw_count, fixed = TRUE))
+
+# within the normalized coverage data, separate high and low oxygen conditions
+HOW_a <- norm_a %>% 
+  filter(grepl("high", starting_oxygen, fixed = TRUE))
+# Convert coverage to numeric 
+HOW_a$coverage <- as.numeric(as.character(HOW_a$coverage))
+
+
+LOW_a <- norm_a %>% 
+  filter(grepl("low", starting_oxygen, fixed = TRUE))
+# Convert coverage to numeric if it's not already
+LOW_a$coverage <- as.numeric(as.character(LOW_a$coverage))
+
+
+# Calculate averages for each week for the HOW data
+HOW_avg_a <- HOW_a %>%
+  group_by(week) %>%
+  summarise(average_coverage = mean(coverage)) %>%  
+  mutate(genome = "Acidovorax") 
+
+# Calculate averages for each week for the LOW data
+LOW_avg_a <- LOW_a %>%
+  group_by(week) %>%
+  summarise(average_coverage = mean(coverage, na.rm = TRUE))  %>%  
+  mutate(genome = "Acidovorax") 
+
+# plot just the points 
+ggplot() + 
+  geom_point(data = HOW_a, aes(x = week, y = coverage, color = "HOW"), size = 2) +
+  geom_point(data = LOW_a, aes(x = week, y = coverage, color = "LOW"), size = 2) +
+  xlab('week') +
+  ylab('coverage') +
+  scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14)) +
+  scale_color_manual(values = c("HOW" = "red", "LOW" = "blue"),
+                     name = "Acidovorax",  # Legend title
+                     labels = c("HOW" = "High initial oxygen", "LOW" = "Low initial oxygen")) +
+  geom_vline(xintercept = c(10.5)) +
+  my_theme
+
+# Plot points and add average lines
+ggplot() + 
+  geom_point(data = HOW_a, aes(x = week, y = coverage, color = "HOW"), size = 2) +
+  geom_point(data = LOW_a, aes(x = week, y = coverage, color = "LOW"), size = 2) +
+  geom_line(data = HOW_avg_a, aes(x = week, y = average_coverage, color = "HOW"), linewidth = 1) + 
+  geom_line(data = LOW_avg_a, aes(x = week, y = average_coverage, color = "LOW"), linewidth = 1) +
+  xlab('week') +
+  ylab('Coverage normalized to rpoD abundance') +
+  scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14)) +
+  scale_color_manual(values = c("HOW" = "red", "LOW" = "blue"),
+                     name = "Acidovorax",  # Legend title
+                     labels = c("HOW" = "High initial oxygen", "LOW" = "Low initial oxygen")) +
+  geom_vline(xintercept = c(10.5)) +
+  my_theme
+```
+
+##Normalized 31/32 and Acidovorax time course
+```{r}
+ggplot() + 
+  geom_line(data = HOW_avg_a, aes(x = week, y = average_coverage, color = "HOW_a"), linetype = "dashed", size = 1) +
+  geom_line(data = LOW_avg_a, aes(x = week, y = average_coverage, color = "LOW_a"), linetype = "dashed", size = 1) +
+  geom_line(data = HOW_avg, aes(x = week, y = average_coverage, color = "HOW"), size = 1) +
+  geom_line(data = LOW_avg, aes(x = week, y = average_coverage, color = "LOW"), size = 1) +
+  xlab('week') +
+  ylab('Normalized coverage') +
+  scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14)) +
+  scale_color_manual(values = c("HOW_a"= "red","LOW_a" = "blue","HOW" = "red", "LOW" = "blue"),
+                     name = "Initial oxygen tension and strain",  
+                     labels = c("HOW_a"= "High O2: Acidovorax","LOW_a"= "Low O2: Acidovorax","HOW" = "High O2: 31/32", 
+                                "LOW" = "Low O2: 31/32")) +
+  geom_vline(xintercept = c(10.1)) + 
+  scale_y_continuous(labels = function(x) format(x, scientific = FALSE)) +
+  my_theme
+
+#log(average coverage)
+ggplot() + 
+  geom_line(data = HOW_avg_a, aes(x = week, y = average_coverage, color = "HOW_a"), linetype = "dashed", size = 1) +
+  geom_line(data = LOW_avg_a, aes(x = week, y = average_coverage, color = "LOW_a"), linetype = "dashed", size = 1) +
+  geom_line(data = HOW_avg, aes(x = week, y = average_coverage, color = "HOW"), size = 1) +
+  geom_line(data = LOW_avg, aes(x = week, y = average_coverage, color = "LOW"), size = 1) +
+  xlab('week') +
+  ylab('Raw counts normalized to housekeeping gene') +
+  scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14)) +
+  scale_color_manual(values = c("HOW_a"= "red","LOW_a" = "blue","HOW" = "red", "LOW" = "blue"),
+                     name = "Initial oxygen tension and strain",  
+                     labels = c("HOW_a"= "High O2: Acidovorax","LOW_a"= "Low O2: Acidovorax","HOW" = "High O2: 31/32", 
+                                "LOW" = "Low O2: 31/32")) +
+  geom_vline(xintercept = c(10.1)) +
+  scale_y_continuous(trans='log10', labels = function(x) format(x, scientific = FALSE)) +
+  my_theme
+```
+
+
+
+## Acidovorax synthase vs. receptor time course
+
+```{r}
+# load the data
+coverage_synth <- read.csv("acidovorax_MTX_synthase_coverage_normalized_metadata.csv")
+coverage_recept <- read.csv("acidovorax_MTX_receptor_coverage_normalized_metadata.csv")
+
+# separate raw counts from normalized coverage
+raw_synth <- coverage_synth %>% 
+  filter(grepl("raw count", raw_count, fixed = TRUE))
+
+norm_synth <- coverage_synth %>% 
+  filter(grepl("normalized coverage", raw_count, fixed = TRUE))
+
+raw_recept <- coverage_recept %>% 
+  filter(grepl("raw count", raw_count, fixed = TRUE))
+
+norm_recept <- coverage_recept %>% 
+  filter(grepl("normalized coverage", raw_count, fixed = TRUE))
+
+# within the raw coverage data, separate high and low oxygen conditions
+HOW_synth <- raw_synth %>% 
+  filter(grepl("high", starting_oxygen, fixed = TRUE))
+# Convert coverage to numeric 
+HOW_synth$coverage <- as.numeric(as.character(HOW_synth$coverage))
+
+LOW_synth <- raw_synth %>% 
+  filter(grepl("low", starting_oxygen, fixed = TRUE))
+# Convert coverage to numeric if it's not already
+LOW_synth$coverage <- as.numeric(as.character(LOW_synth$coverage))
+
+
+HOW_recept <- raw_recept %>% 
+  filter(grepl("high", starting_oxygen, fixed = TRUE))
+# Convert coverage to numeric 
+HOW_recept$coverage <- as.numeric(as.character(HOW_recept$coverage))
+
+LOW_recept <- raw_recept %>% 
+  filter(grepl("low", starting_oxygen, fixed = TRUE))
+# Convert coverage to numeric if it's not already
+LOW_recept$coverage <- as.numeric(as.character(LOW_recept$coverage))
+
+# Calculate averages for each week for the HOW data
+HOW_avg_synth <- HOW_synth %>%
+  group_by(week) %>%
+  summarise(average_coverage = mean(coverage)) %>%  
+  mutate(genome = "Acidovorax")
+
+HOW_avg_recept <- HOW_recept %>%
+  group_by(week) %>%
+  summarise(average_coverage = mean(coverage)) %>%  
+  mutate(genome = "Acidovorax") 
+
+# Calculate averages for each week for the LOW data
+LOW_avg_synth <- LOW_synth %>%
+  group_by(week) %>%
+  summarise(average_coverage = mean(coverage, na.rm = TRUE))  %>%  
+  mutate(genome = "Acidovorax") 
+
+LOW_avg_recept <- LOW_recept %>%
+  group_by(week) %>%
+  summarise(average_coverage = mean(coverage, na.rm = TRUE))  %>%  
+  mutate(genome = "Acidovorax")
+
+# Plot points and add average lines
+ggplot() + 
+  geom_line(data = HOW_avg_recept, aes(x = week, y = average_coverage, color = "HOW_a"), linetype = "dashed", size = 1) +
+  geom_line(data = LOW_avg_recept, aes(x = week, y = average_coverage, color = "LOW_a"), linetype = "dashed", size = 1) +
+  geom_line(data = HOW_avg_synth, aes(x = week, y = average_coverage, color = "HOW"), size = 1) +
+  geom_line(data = LOW_avg_synth, aes(x = week, y = average_coverage, color = "LOW"), size = 1) +
+  xlab('week') +
+  ylab('Raw counts normalized to rpoD abundance') +
+  scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14)) +
+  scale_color_manual(values = c("HOW_a"= "red","LOW_a" = "blue","HOW" = "red", "LOW" = "blue"),
+                     name = "Initial oxygen tension and strain",  
+                     labels = c("HOW_a"= "High O2: receptor","LOW_a"= "Low O2: receptor","HOW" = "High O2: synthase", 
+                                "LOW" = "Low O2: synthase")) +
+  geom_vline(xintercept = c(10.1)) + 
+  scale_y_continuous(labels = function(x) format(x, scientific = FALSE)) +
+  my_theme
+```
+
+##Normalized 31/32 synthase and Acidovorax receptor time course
+```{r}
+# 31/32 synthase, acidovorax synthase, acidovorax receptor for HO and LO
+ggplot() + 
+  geom_line(data = HOW_avg_recept, aes(x = week, y = average_coverage, color = "HOW_a"), linetype = "dashed", size = 1) +
+  geom_line(data = LOW_avg_recept, aes(x = week, y = average_coverage, color = "LOW_a"), linetype = "dashed", size = 1) +
+  geom_line(data = HOW_avg_synth, aes(x = week, y = average_coverage, color = "HOW"), size = 1) +
+  geom_line(data = LOW_avg_synth, aes(x = week, y = average_coverage, color = "LOW"), size = 1) +
+  geom_line(data = HOW_avg, aes(x = week, y = average_coverage, color = "HOW3"), size = 1) +
+  geom_line(data = LOW_avg, aes(x = week, y = average_coverage, color = "LOW3"), size = 1) +
+  xlab('week') +
+  ylab('Raw counts normalized to rpoD abundance') +
+  scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14)) +
+  scale_color_manual(values = c("HOW_a"= "red","LOW_a" = "blue","HOW" = "red", "LOW" = "blue", "HOW3" = "black", "LOW3" = "gray"),
+                     name = "Initial oxygen tension and strain",  
+                     labels = c("HOW_a"= "High O2: Acidovorax receptor","LOW_a"= "Low O2: Acidovorax receptor",
+                                "HOW" = "High O2: Acidovorax synthase", "LOW" = "Low O2: Acidovorax synthase", 
+                                "HOW3"="High O2: 31/32 synthase", "LOW3" = "Low O2: 31/32 synthase")) +
+  geom_vline(xintercept = c(10.1)) + 
+  scale_y_continuous(trans='log10', labels = function(x) format(x, scientific = FALSE)) +
+  my_theme
+
+# 31/32 synthase, acidovorax synthase, acidovorax receptor for HO
+ggplot() + 
+  geom_line(data = HOW_avg_recept, aes(x = week, y = average_coverage, color = "HOW_a"), linetype = "dashed", size = 1) +
+  geom_line(data = HOW_avg_synth, aes(x = week, y = average_coverage, color = "HOW"), size = 1) +
+  geom_line(data = HOW_avg, aes(x = week, y = average_coverage, color = "HOW3"), size = 1) +
+  xlab('week') +
+  ylab('Raw counts normalized to rpoD abundance') +
+  scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14)) +
+  scale_color_manual(values = c("HOW_a"= "red","HOW" = "red", "HOW3" = "black"),
+                     name = "Initial oxygen tension and strain",  
+                     labels = c("HOW_a"= "High O2: Acidovorax receptor",
+                                "HOW" = "High O2: Acidovorax synthase",
+                                "HOW3"="High O2: 31/32 synthase")) +
+  geom_vline(xintercept = c(10.1)) + 
+  scale_y_continuous(trans='log10', labels = function(x) format(x, scientific = FALSE)) +
+  my_theme
+
+# 31/32 synthase, acidovorax synthase, acidovorax receptor for LO
+ggplot() + 
+  
+  geom_line(data = LOW_avg_recept, aes(x = week, y = average_coverage, color = "LOW_a"), linetype = "dashed", size = 1) +
+
+  geom_line(data = LOW_avg_synth, aes(x = week, y = average_coverage, color = "LOW"), size = 1) +
+ 
+  geom_line(data = LOW_avg, aes(x = week, y = average_coverage, color = "LOW3"), size = 1) +
+  xlab('week') +
+  ylab('Raw counts normalized to rpoD abundance') +
+  scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14)) +
+  scale_color_manual(values = c("LOW_a" = "blue","LOW" = "blue","LOW3" = "gray"),
+                     name = "Initial oxygen tension and strain",  
+                     labels = c("LOW_a"= "Low O2: Acidovorax receptor",
+                                "LOW" = "Low O2: Acidovorax synthase", 
+                                "LOW3" = "Low O2: 31/32 synthase")) +
+  geom_vline(xintercept = c(10.1)) + 
+  scale_y_continuous(trans='log10', labels = function(x) format(x, scientific = FALSE)) +
+  my_theme
+
+```
+
+
+```{r}
+# plotting with points
+# put a zero in front of single digits
+# Convert to numeric only if all values are numbers
+if (all(grepl("^[0-9]+$", HOW_recept$sample_ID))) {
+  HOW_recept$sample_ID <- as.numeric(HOW_recept$sample_ID)
+  HOW_recept$sample_ID <- sprintf("%02d", HOW_recept$sample_ID)
+} else {
+  warning("Not all values in 'sample_ID' are numbers.")
+}
+
+# The same for 'week'
+if (all(grepl("^[0-9]+$", HOW_recept$week))) {
+  HOW_recept$week <- as.numeric(HOW_recept$week)
+  HOW_recept$week <- sprintf("%02d", HOW_recept$week)
+} else {
+  warning("Not all values in 'week' are numbers.")
+}
+
+HOW_recept$sample_ID <- str_pad(HOW_recept$sample_ID, width = 3, pad = "0")
+HOW_recept$week <- str_pad(HOW_recept$week, width = 2, pad = "0")
+
+# add column with replicate identifiers (A, B, C, D)
+HOW_recept_rep <- HOW_recept %>%
+  group_by(week) %>%
+  arrange(.,sample_ID) %>%
+  mutate(replicate = LETTERS[row_number()]) %>%
+  ungroup()
+
+#convert week values back to numeric
+HOW_recept_rep$week <- as.numeric(as.character(HOW_recept_rep$week))
+
+# put a zero in front of single digits
+# Convert to numeric only if all values are numbers
+if (all(grepl("^[0-9]+$", HOW_synth$sample_ID))) {
+  HOW_synth$sample_ID <- as.numeric(HOW_synth$sample_ID)
+  HOW_synth$sample_ID <- sprintf("%02d", HOW_synth$sample_ID)
+} else {
+  warning("Not all values in 'sample_ID' are numbers.")
+}
+
+# The same for 'week'
+if (all(grepl("^[0-9]+$", HOW_synth$week))) {
+  HOW_synth$week <- as.numeric(HOW_synth$week)
+  HOW_synth$week <- sprintf("%02d", HOW_synth$week)
+} else {
+  warning("Not all values in 'week' are numbers.")
+}
+
+HOW_synth$sample_ID <- str_pad(HOW_synth$sample_ID, width = 3, pad = "0")
+HOW_synth$week <- str_pad(HOW_synth$week, width = 2, pad = "0")
+
+# add column with replicate identifiers (A, B, C, D)
+HOW_synth_rep <- HOW_synth %>%
+  group_by(week) %>%
+  arrange(.,sample_ID) %>%
+  mutate(replicate = LETTERS[row_number()]) %>%
+  ungroup()
+
+#convert week values back to numeric
+HOW_synth_rep$week <- as.numeric(as.character(HOW_synth_rep$week))
+
+# put a zero in front of single digits
+# Convert to numeric only if all values are numbers
+if (all(grepl("^[0-9]+$", HOW$sample_ID))) {
+  HOW$sample_ID <- as.numeric(HOW$sample_ID)
+  HOW$sample_ID <- sprintf("%02d", HOW$sample_ID)
+} else {
+  warning("Not all values in 'sample_ID' are numbers.")
+}
+
+# The same for 'week'
+if (all(grepl("^[0-9]+$", HOW$week))) {
+  HOW$week <- as.numeric(HOW$week)
+  HOW$week <- sprintf("%02d", HOW$week)
+} else {
+  warning("Not all values in 'week' are numbers.")
+}
+
+HOW$sample_ID <- str_pad(HOW$sample_ID, width = 3, pad = "0")
+HOW$week <- str_pad(HOW$week, width = 2, pad = "0")
+
+# add column with replicate identifiers (A, B, C, D)
+HOW_rep <- HOW %>%
+  group_by(week) %>%
+  arrange(.,sample_ID) %>%
+  mutate(replicate = LETTERS[row_number()]) %>%
+  ungroup()
+
+#convert week values back to numeric
+HOW_rep$week <- as.numeric(as.character(HOW_rep$week))
+
+# plot
+ggplot() + 
+  geom_point(data = HOW_recept_rep, aes(x = week, y = coverage, color = "HOW_a", shape = replicate), size = 3) +
+  geom_point(data = HOW_synth_rep, aes(x = week, y = coverage, color = "HOW", shape = replicate), size = 3) +
+  geom_point(data = HOW_rep, aes(x = week, y = coverage, color = "HOW3", shape = replicate), size = 3) +
+  xlab('week') +
+  ylab('Raw counts normalized to rpoD abundance') +
+  scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14)) +
+  scale_color_manual(values = c("HOW_a"= "red","HOW" = "orange", "HOW3" = "black"),
+                     name = "Initial oxygen tension and strain",  
+                     labels = c("HOW_a"= "High O2: Acidovorax receptor",
+                                "HOW" = "High O2: Acidovorax synthase",
+                                "HOW3"="High O2: 31/32 synthase")) +
+  geom_vline(xintercept = c(10.1)) + 
+  scale_y_continuous(trans='log10', labels = function(x) format(x, scientific = FALSE), limits = c(0.001, 30)) +
+  my_theme
+
+
+# plot with acidovorax only
+ggplot() + 
+  geom_point(data = HOW_recept_rep, aes(x = week, y = coverage, color = "HOW_a", shape = replicate), size = 3) +
+  geom_point(data = HOW_synth_rep, aes(x = week, y = coverage, color = "HOW", shape = replicate), size = 3) +
+  xlab('week') +
+  ylab('Raw counts normalized to rpoD abundance') +
+  scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14)) +
+  scale_color_manual(values = c("HOW_a"= "red","HOW" = "orange"),
+                     name = "Initial oxygen tension and strain",  
+                     labels = c("HOW_a"= "High O2: Acidovorax receptor",
+                                "HOW" = "High O2: Acidovorax synthase")) +
+  geom_vline(xintercept = c(10.1)) + 
+  scale_y_continuous(trans='log10', labels = function(x) format(x, scientific = FALSE), limits = c(0.001,30)) +
+  my_theme
+```
+
+```{r}
+# plotting with points
+# put a zero in front of single digits
+# Convert to numeric only if all values are numbers
+if (all(grepl("^[0-9]+$", LOW_recept$sample_ID))) {
+  LOW_recept$sample_ID <- as.numeric(LOW_recept$sample_ID)
+  LOW_recept$sample_ID <- sprintf("%02d", LOW_recept$sample_ID)
+} else {
+  warning("Not all values in 'sample_ID' are numbers.")
+}
+
+# The same for 'week'
+if (all(grepl("^[0-9]+$", LOW_recept$week))) {
+  LOW_recept$week <- as.numeric(LOW_recept$week)
+  LOW_recept$week <- sprintf("%02d", LOW_recept$week)
+} else {
+  warning("Not all values in 'week' are numbers.")
+}
+
+LOW_recept$sample_ID <- str_pad(LOW_recept$sample_ID, width = 3, pad = "0")
+LOW_recept$week <- str_pad(LOW_recept$week, width = 2, pad = "0")
+
+# add column with replicate identifiers (A, B, C, D)
+LOW_recept_rep <- LOW_recept %>%
+  group_by(week) %>%
+  arrange(.,sample_ID) %>%
+  mutate(replicate = LETTERS[row_number()]) %>%
+  ungroup()
+
+#convert week values back to numeric
+LOW_recept_rep$week <- as.numeric(as.character(LOW_recept_rep$week))
+
+# put a zero in front of single digits
+# Convert to numeric only if all values are numbers
+if (all(grepl("^[0-9]+$", LOW_synth$sample_ID))) {
+  LOW_synth$sample_ID <- as.numeric(LOW_synth$sample_ID)
+  LOW_synth$sample_ID <- sprintf("%02d", LOW_synth$sample_ID)
+} else {
+  warning("Not all values in 'sample_ID' are numbers.")
+}
+
+# The same for 'week'
+if (all(grepl("^[0-9]+$", LOW_synth$week))) {
+  LOW_synth$week <- as.numeric(LOW_synth$week)
+  LOW_synth$week <- sprintf("%02d", LOW_synth$week)
+} else {
+  warning("Not all values in 'week' are numbers.")
+}
+
+LOW_synth$sample_ID <- str_pad(LOW_synth$sample_ID, width = 3, pad = "0")
+LOW_synth$week <- str_pad(LOW_synth$week, width = 2, pad = "0")
+
+# add column with replicate identifiers (A, B, C, D)
+LOW_synth_rep <- LOW_synth %>%
+  group_by(week) %>%
+  arrange(.,sample_ID) %>%
+  mutate(replicate = LETTERS[row_number()]) %>%
+  ungroup()
+
+#convert week values back to numeric
+LOW_synth_rep$week <- as.numeric(as.character(LOW_synth_rep$week))
+
+# put a zero in front of single digits
+# Convert to numeric only if all values are numbers
+if (all(grepl("^[0-9]+$", LOW$sample_ID))) {
+  LOW$sample_ID <- as.numeric(LOW$sample_ID)
+  LOW$sample_ID <- sprintf("%02d", LOW$sample_ID)
+} else {
+  warning("Not all values in 'sample_ID' are numbers.")
+}
+
+# The same for 'week'
+if (all(grepl("^[0-9]+$", LOW$week))) {
+  LOW$week <- as.numeric(LOW$week)
+  LOW$week <- sprintf("%02d", LOW$week)
+} else {
+  warning("Not all values in 'week' are numbers.")
+}
+
+LOW$sample_ID <- str_pad(LOW$sample_ID, width = 3, pad = "0")
+LOW$week <- str_pad(LOW$week, width = 2, pad = "0")
+
+# add column with replicate identifiers (A, B, C, D)
+LOW_rep <- LOW %>%
+  group_by(week) %>%
+  arrange(.,sample_ID) %>%
+  mutate(replicate = LETTERS[row_number()]) %>%
+  ungroup()
+
+#convert week values back to numeric
+LOW_rep$week <- as.numeric(as.character(LOW_rep$week))
+
+# plot
+ggplot() + 
+  geom_point(data = LOW_recept_rep, aes(x = week, y = coverage, color = "LOW_a", shape = replicate), size = 3) +
+  geom_point(data = LOW_synth_rep, aes(x = week, y = coverage, color = "LOW", shape = replicate), size = 3) +
+  geom_point(data = LOW_rep, aes(x = week, y = coverage, color = "LOW3", shape = replicate), size = 3) +
+  xlab('week') +
+  ylab('Raw counts normalized to rpoD abundance') +
+  scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14)) +
+  scale_color_manual(values = c("LOW_a"= "blue","LOW" = "cornflowerblue", "LOW3" = "black"),
+                     name = "Initial oxygen tension and strain",  
+                     labels = c("LOW_a"= "Low O2: Acidovorax receptor",
+                                "LOW" = "Low O2: Acidovorax synthase",
+                                "LOW3"="Low O2: 31/32 synthase")) +
+  geom_vline(xintercept = c(10.1)) + 
+  scale_y_continuous(trans='log10', labels = function(x) format(x, scientific = FALSE),  limits = c(0.001,30)) +
+  my_theme
+
+# plot with acidovorax only
+ggplot() + 
+  geom_point(data = LOW_recept_rep, aes(x = week, y = coverage, color = "LOW_a", shape = replicate), size = 3) +
+  geom_point(data = LOW_synth_rep, aes(x = week, y = coverage, color = "LOW", shape = replicate), size = 3) +
+  xlab('week') +
+  ylab('Raw counts normalized to rpoD abundance') +
+  scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14)) +
+  scale_color_manual(values = c("LOW_a"= "blue","LOW" = "cornflowerblue"),
+                     name = "Initial oxygen tension and strain",  
+                     labels = c("LOW_a"= "Low O2: Acidovorax receptor",
+                                "LOW" = "Low O2: Acidovorax synthase")) +
+  geom_vline(xintercept = c(10.1)) + 
+  scale_y_continuous(trans='log10', labels = function(x) format(x, scientific = FALSE), limits = c(0.001,30)) +
+  my_theme
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## anthranilate expression
+
+31/32 anthranilate synthase/tundrenone expression: 
+  
+```{r}
+# Load the data
+coverage_anth <- read.csv("31-32_MTX_anthranilate1_coverage.csv")
+
+# generate nicknames
+generateNickname <- function(name) {
+  nickname <- NA_character_ # Default to NA character vector
+  
+  if(str_detect(name, "Sediment Metatranscriptome")) {
+    matches <- str_match(name, "Sediment Metatranscriptome (\\d+)_([A-Z0-9]+)")
+    nickname <- paste0("MT", matches[,2], "_", matches[,3])
+    if(str_detect(name, "Raw Count")) nickname <- paste0(nickname, "_rc")
+  } else {
+    nickname <- name # Default case
+  }
+  
+  # Replace dashes and spaces with underscores for all nicknames
+  nickname <- str_replace_all(nickname, "[- ]", "_")
+  
+  return(nickname)
+}
+
+# Then apply this function to your dataframe
+coverage_anth$Nickname <- sapply(coverage_anth$sample, generateNickname)
+
+# Add new columns: "sample_ID", "starting_oxygen", "week", "raw_count"
+coverage_anth <- coverage_anth %>%
+  mutate(
+    sample_ID = as.numeric(str_extract(Nickname, "(?<=(MT))\\d+")), 
+    starting_oxygen = case_when(
+      str_detect(Nickname, "_LOW") ~ "low",
+      str_detect(Nickname, "_HOW") ~ "high",
+      TRUE ~ NA_character_), 
+    week = as.numeric(str_extract(Nickname, "(?<=_(LOW|HOW))\\d+")), 
+    raw_count = if_else(str_detect(Nickname, "_rc$"), "raw count", "normalized coverage"), 
+    genome = "31-32"
+    )
+```
+
+```{r}
+# Save the modified dataframe
+write.csv(coverage_anth, "31-32_MTX_anthranilate1_coverage_metadata.csv", row.names = TRUE)
+```
+
+Okay now my dataframe looks good and I can organize everything by the experimental details. 
+Let's make a plot of the normalized coverage of pfam0765 (homoserine lactone synthetase) over time for metatranscriptome datasets aligned to the 31/32 genome. 
+
+```{r}
+# separate raw couts from normalized coverage
+raw_anth <- coverage_anth %>% 
+  filter(grepl("raw count", raw_count, fixed = TRUE))
+
+norm_anth <- coverage_anth %>% 
+  filter(grepl("normalized coverage", raw_count, fixed = TRUE))
+
+# within the normalized coverage data, separate high and low oxygen conditions
+HOW_anth <- norm_anth %>% 
+  filter(grepl("high", starting_oxygen, fixed = TRUE))
+HOW_anth$coverage <- as.numeric(as.character(HOW_anth$coverage))
+
+LOW_anth <- norm_anth %>% 
+  filter(grepl("low", starting_oxygen, fixed = TRUE))
+LOW_anth$coverage <- as.numeric(as.character(LOW_anth$coverage))
+
+# Calculate averages for each week for the HOW data
+HOW_avg_anth <- HOW_anth %>%
+  group_by(week) %>%
+  summarise(average_coverage = mean(coverage, na.rm = TRUE))  %>%  
+  mutate(genome = "31-32") 
+
+# Calculate averages for each week for the LOW data
+LOW_avg_anth <- LOW_anth %>%
+  group_by(week) %>%
+  summarise(average_coverage = mean(coverage, na.rm = TRUE)) %>%  
+  mutate(genome = "31-32") 
+
+# Plot points and add average lines
+ggplot() + 
+  geom_point(data = HOW_anth, aes(x = week, y = coverage, color = "HOW"), size = 2) +
+  geom_point(data = LOW_anth, aes(x = week, y = coverage, color = "LOW"), size = 2) +
+  geom_line(data = HOW_avg_anth, aes(x = week, y = average_coverage, color = "HOW"), linewidth = 1) + 
+  geom_line(data = LOW_avg_anth, aes(x = week, y = average_coverage, color = "LOW"), linewidth = 1) +
+  xlab('week') +
+  ylab('coverage') +
+  scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14)) +
+  scale_color_manual(values = c("HOW" = "red", "LOW" = "blue"),
+                     name = "31/32: anthranilate1",  # Legend title
+                     labels = c("HOW" = "High initial oxygen", "LOW" = "Low initial oxygen")) +
+  geom_vline(xintercept = c(10.5)) +
+  my_theme
+```
+
+Combining synthetase and anthranilate expression in 31/32: 
+```{r}
+ggplot() + 
+  geom_line(data = HOW_avg_anth, aes(x = week, y = log(average_coverage), color = "HOW_anth"), linetype = "dotted", size = 1) +
+  geom_line(data = LOW_avg_anth, aes(x = week, y = log(average_coverage), color = "LOW_anth"), linetype = "dotted", size = 1) +
+  geom_line(data = HOW_avg, aes(x = week, y = log(average_coverage), color = "HOW"), size = 1) +
+  geom_line(data = LOW_avg, aes(x = week, y = log(average_coverage), color = "LOW"), size = 1) +
+  xlab('week') +
+  ylab('log(coverage)') +
+  scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14)) +
+  scale_color_manual(values = c("HOW_anth"= "red","LOW_anth" = "blue","HOW" = "red", "LOW" = "blue"),
+                     name = "Initial oxygen tension and strain",  
+                     labels = c("HOW_anth"= "High O2: anthranilate","LOW_anth"= "Low O2: anthranilate","HOW" = "High O2: QS synthetase", "LOW" = "Low O2: QS synthetase")) +
+  geom_vline(xintercept = c(10.5)) +
+  my_theme
+```
+
+## tunJ expression
+```{r}
+# Load the data
+coverage_tunJ <- read.csv("31-32_MTX_tunJ_coverage.csv")
+
+# generate nicknames
+generateNickname <- function(name) {
+  nickname <- NA_character_ # Default to NA character vector
+  
+  if(str_detect(name, "Sediment Metatranscriptome")) {
+    matches <- str_match(name, "Sediment Metatranscriptome (\\d+)_([A-Z0-9]+)")
+    nickname <- paste0("MT", matches[,2], "_", matches[,3])
+    if(str_detect(name, "Raw Count")) nickname <- paste0(nickname, "_rc")
+  } else {
+    nickname <- name # Default case
+  }
+  
+  # Replace dashes and spaces with underscores for all nicknames
+  nickname <- str_replace_all(nickname, "[- ]", "_")
+  
+  return(nickname)
+}
+
+# Then apply this function to your dataframe
+coverage_tunJ$Nickname <- sapply(coverage_tunJ$sample, generateNickname)
+
+# Add new columns: "sample_ID", "starting_oxygen", "week", "raw_count"
+coverage_tunJ <- coverage_tunJ %>%
+  mutate(
+    sample_ID = as.numeric(str_extract(Nickname, "(?<=(MT))\\d+")), 
+    starting_oxygen = case_when(
+      str_detect(Nickname, "_LOW") ~ "low",
+      str_detect(Nickname, "_HOW") ~ "high",
+      TRUE ~ NA_character_), 
+    week = as.numeric(str_extract(Nickname, "(?<=_(LOW|HOW))\\d+")), 
+    raw_count = if_else(str_detect(Nickname, "_rc$"), "raw count", "normalized coverage"), 
+    genome = "31-32"
+    )
+```
+
+```{r}
+# Save the modified dataframe
+write.csv(coverage_tunJ, "31-32_MTX_tunJ_coverage_metadata.csv", row.names = TRUE)
+```
+
+Okay now my dataframe looks good and I can organize everything by the experimental details. 
+Let's make a plot of the normalized coverage of pfam0765 (homoserine lactone synthetase) over time for metatranscriptome datasets aligned to the 31/32 genome. 
+
+```{r}
+# separate raw couts from normalized coverage
+raw_tunJ <- coverage_tunJ %>% 
+  filter(grepl("raw count", raw_count, fixed = TRUE))
+
+norm_tunJ <- coverage_tunJ %>% 
+  filter(grepl("normalized coverage", raw_count, fixed = TRUE))
+
+# within the normalized coverage data, separate high and low oxygen conditions
+HOW_tunJ <- norm_tunJ %>% 
+  filter(grepl("high", starting_oxygen, fixed = TRUE))
+HOW_tunJ$coverage <- as.numeric(as.character(HOW_tunJ$coverage))
+
+LOW_tunJ <- norm_tunJ %>% 
+  filter(grepl("low", starting_oxygen, fixed = TRUE))
+LOW_tunJ$coverage <- as.numeric(as.character(LOW_tunJ$coverage))
+
+# Calculate averages for each week for the HOW data
+HOW_avg_tunJ <- HOW_tunJ %>%
+  group_by(week) %>%
+  summarise(average_coverage = mean(coverage, na.rm = TRUE))  %>%  
+  mutate(genome = "31-32") 
+
+# Calculate averages for each week for the LOW data
+LOW_avg_tunJ <- LOW_tunJ %>%
+  group_by(week) %>%
+  summarise(average_coverage = mean(coverage, na.rm = TRUE)) %>%  
+  mutate(genome = "31-32") 
+
+# Plot points and add average lines
+ggplot() + 
+  geom_point(data = HOW_tunJ, aes(x = week, y = coverage, color = "HOW"), size = 2) +
+  geom_point(data = LOW_tunJ, aes(x = week, y = coverage, color = "LOW"), size = 2) +
+  geom_line(data = HOW_avg_tunJ, aes(x = week, y = average_coverage, color = "HOW"), linewidth = 1) + 
+  geom_line(data = LOW_avg_tunJ, aes(x = week, y = average_coverage, color = "LOW"), linewidth = 1) +
+  xlab('week') +
+  ylab('coverage') +
+  scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14)) +
+  scale_color_manual(values = c("HOW" = "red", "LOW" = "blue"),
+                     name = "31/32: tunJ",  # Legend title
+                     labels = c("HOW" = "High initial oxygen", "LOW" = "Low initial oxygen")) +
+  geom_vline(xintercept = c(10.5)) +
+  my_theme
+```
+
+Combining synthetase and tunJ expression in 31/32: 
+```{r}
+ggplot() + 
+  geom_line(data = HOW_avg_tunJ, aes(x = week, y = log(average_coverage), color = "HOW_tunJ"), linetype = "dotted", size = 1) +
+  geom_line(data = LOW_avg_tunJ, aes(x = week, y = log(average_coverage), color = "LOW_tunJ"), linetype = "dotted", size = 1) +
+  geom_line(data = HOW_avg, aes(x = week, y = log(average_coverage), color = "HOW"), size = 1) +
+  geom_line(data = LOW_avg, aes(x = week, y = log(average_coverage), color = "LOW"), size = 1) +
+  xlab('week') +
+  ylab('log(coverage)') +
+  scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14)) +
+  scale_color_manual(values = c("HOW_tunJ"= "red","LOW_tunJ" = "blue","HOW" = "red", "LOW" = "blue"),
+                     name = "Initial oxygen tension and strain",  
+                     labels = c("HOW_tunJ"= "High O2: tunJ","LOW_tunJ"= "Low O2: tunJ","HOW" = "High O2: QS synthetase", "LOW" = "Low O2: QS synthetase")) +
+  geom_vline(xintercept = c(10.5)) +
+  my_theme
+```
+Tundrenone follows the same pattern as the QS, which makes sense since tundrenone BGC is regulated by the QS system. In low oxygen conditions, tundrenone and QS are more highly expressed. 
 
 
 
@@ -141,7 +1267,9 @@ For 31/32, the high initial oxygen samples had very low expression of the homose
 
 
 
+# Individual RNAseq files
 Once downloaded and in the correct folder, we need to clean up the files: 
+  
 ```{r}
 # function to load RNAseq file and separate the columns properly
 load_and_process_RNAseq_csv <- function(file_paths) {
