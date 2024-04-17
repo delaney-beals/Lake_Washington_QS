@@ -1,6 +1,9 @@
 ---
 title: "Synthase expression time course"
-output: html_notebook
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
 ---
 
 # Synthase expression time course
@@ -1011,21 +1014,722 @@ ggplot() +
   scale_y_continuous(trans='log10', labels = function(x) format(x, scientific = FALSE), limits = c(0.001,30)) +
   my_theme
 ```
+## Acidovorax flagellin1 + synthase time course
+```{r}
+# Load the data
+coverage_flag <- read.csv("acidovorax_MTX_flagellin2548501241_coverage_normalized.csv")
+
+# replace . with _
+coverage_flag$sample <- gsub("\\.", "_", coverage_flag$sample)
+
+# generate nicknames
+generateNickname <- function(name) {
+  nickname <- NA_character_ 
+  if(str_detect(name, "Sediment_Metatranscriptome")) {
+    matches <- str_match(name, "Sediment_Metatranscriptome_(\\d+)_([A-Z]+\\d*)")
+    nickname <- paste0("MT", matches[,2], "_", matches[,3])
+    if(str_detect(name, "Raw_Count")) nickname <- paste0(nickname, "_rc")
+  } else {
+    nickname <- name 
+    }
+  nickname <- str_replace_all(nickname, "[- ]", "_")
+  return(nickname)
+}
+
+# Then apply this function to your dataframe
+coverage_flag$Nickname <- sapply(coverage_flag$sample, generateNickname)
+
+# Add new columns: "sample_ID", "starting_oxygen", "week", "raw_count"
+coverage_flag <- coverage_flag %>%
+  mutate(
+    sample_ID = as.numeric(str_extract(Nickname, "(?<=(MT))\\d+")), 
+    starting_oxygen = case_when(
+      str_detect(Nickname, "_LOW") ~ "low",
+      str_detect(Nickname, "_HOW") ~ "high",
+      TRUE ~ NA_character_), 
+    week = as.numeric(str_extract(Nickname, "(?<=_(LOW|HOW))\\d+")), 
+    raw_count = if_else(str_detect(Nickname, "_rc$"), "raw count", "normalized coverage"), 
+    genome = "Acidovorax"
+    )
+```
+
+```{r}
+# Save the modified dataframe
+write.csv(coverage_flag, "acidovorax_MTX_flagellin2548501241_coverage_normalized_metadata.csv", row.names = TRUE)
+```
+
+Plotting Acidovorax autoinducer synthase expression time course: 
+```{r}
+# separate raw couts from normalized coverage
+raw_flag <- coverage_flag %>% 
+  filter(grepl("raw count", raw_count, fixed = TRUE))
+
+norm_flag <- coverage_flag %>% 
+  filter(grepl("normalized coverage", raw_count, fixed = TRUE))
+
+# within the normalized coverage data, separate high and low oxygen conditions
+HOW_flag <- raw_flag %>% 
+  filter(grepl("high", starting_oxygen, fixed = TRUE))
+# Convert coverage to numeric 
+HOW_flag$coverage <- as.numeric(as.character(HOW_flag$coverage))
+
+
+LOW_flag <- raw_flag %>% 
+  filter(grepl("low", starting_oxygen, fixed = TRUE))
+# Convert coverage to numeric if it's not already
+LOW_flag$coverage <- as.numeric(as.character(LOW_flag$coverage))
+
+
+# Calculate averages for each week for the HOW data
+HOW_avg_flag <- HOW_flag %>%
+  group_by(week) %>%
+  summarise(average_coverage = mean(coverage)) %>%  
+  mutate(genome = "Acidovorax") 
+
+# Calculate averages for each week for the LOW data
+LOW_avg_flag <- LOW_flag %>%
+  group_by(week) %>%
+  summarise(average_coverage = mean(coverage, na.rm = TRUE))  %>%  
+  mutate(genome = "Acidovorax") 
+
+
+# Plot points and add average lines
+ggplot() + 
+  geom_point(data = HOW_flag, aes(x = week, y = coverage, color = "HOW"), size = 2) +
+  geom_point(data = LOW_flag, aes(x = week, y = coverage, color = "LOW"), size = 2) +
+  geom_line(data = HOW_avg_flag, aes(x = week, y = average_coverage, color = "HOW"), linewidth = 1) + 
+  geom_line(data = LOW_avg_flag, aes(x = week, y = average_coverage, color = "LOW"), linewidth = 1) +
+  xlab('week') +
+  ylab('flagellin raw counts normalized to rpoD abundance') +
+  scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14)) +
+  scale_color_manual(values = c("HOW" = "red", "LOW" = "blue"),
+                     name = "Acidovorax",  # Legend title
+                     labels = c("HOW" = "High initial oxygen", "LOW" = "Low initial oxygen")) +
+  geom_vline(xintercept = c(10.5)) +
+  my_theme
+```
+
+```{r}
+# put a zero in front of single digits
+# Convert to numeric only if all values are numbers
+if (all(grepl("^[0-9]+$", LOW_flag$sample_ID))) {
+  LOW_flag$sample_ID <- as.numeric(LOW_flag$sample_ID)
+  LOW_flag$sample_ID <- sprintf("%02d", LOW_flag$sample_ID)
+} else {
+  warning("Not all values in 'sample_ID' are numbers.")
+}
+
+# The same for 'week'
+if (all(grepl("^[0-9]+$", LOW_flag$week))) {
+  LOW_flag$week <- as.numeric(LOW_flag$week)
+  LOW_flag$week <- sprintf("%02d", LOW_flag$week)
+} else {
+  warning("Not all values in 'week' are numbers.")
+}
+
+LOW_flag$sample_ID <- str_pad(LOW_flag$sample_ID, width = 3, pad = "0")
+LOW_flag$week <- str_pad(LOW_flag$week, width = 2, pad = "0")
+
+# add column with replicate identifiers (A, B, C, D)
+LOW_flag_rep <- LOW_flag %>%
+  group_by(week) %>%
+  arrange(.,sample_ID) %>%
+  mutate(replicate = LETTERS[row_number()]) %>%
+  ungroup()
+
+#convert week values back to numeric
+LOW_flag_rep$week <- as.numeric(as.character(LOW_flag_rep$week))
+
+# plot that includes the synthase
+ggplot() + 
+  geom_point(data = LOW_flag_rep, aes(x = week, y = coverage, color = "LOW_a", shape = replicate), size = 3) +
+  geom_point(data = LOW_synth_rep, aes(x = week, y = coverage, color = "LOW", shape = replicate), size = 3) +
+  xlab('week') +
+  ylab('Raw counts normalized to rpoD abundance') +
+  scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14)) +
+  scale_color_manual(values = c("LOW_a"= "blue","LOW" = "cornflowerblue"),
+                     name = "Initial oxygen tension and strain",  
+                     labels = c("LOW_a"= "Low O2: Acidovorax flagellin",
+                                "LOW" = "Low O2: Acidovorax synthase")) +
+  geom_vline(xintercept = c(10.1)) + 
+  scale_y_continuous(trans='log10', labels = function(x) format(x, scientific = FALSE), limits = c(0.001,30)) +
+  my_theme
+
+# plot with 31/32 synthase
+# plot
+ggplot() + 
+  geom_point(data = LOW_flag_rep, aes(x = week, y = coverage, color = "LOW_a", shape = replicate), size = 3) +
+  geom_point(data = LOW_synth_rep, aes(x = week, y = coverage, color = "LOW", shape = replicate), size = 3) +
+  geom_point(data = LOW_rep, aes(x = week, y = coverage, color = "LOW3", shape = replicate), size = 3) +
+  xlab('week') +
+  ylab('Raw counts normalized to rpoD abundance') +
+  scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14)) +
+  scale_color_manual(values = c("LOW_a"= "blue","LOW" = "cornflowerblue", "LOW3" = "black"),
+                     name = "Initial oxygen tension and strain",  
+                     labels = c("LOW_a"= "Low O2: Acidovorax flagellin",
+                                "LOW" = "Low O2: Acidovorax synthase",
+                                "LOW3"="Low O2: 31/32 synthase")) +
+  geom_vline(xintercept = c(10.1)) + 
+  scale_y_continuous(trans='log10', labels = function(x) format(x, scientific = FALSE),  limits = c(0.001,30)) +
+  my_theme
+```
+## Acidovorax flagellin2 + synthase time course
+```{r}
+# Load the data
+coverage_flag2 <- read.csv("acidovorax_MTX_flagellin2548498152_coverage_normalized.csv")
+
+# replace . with _
+coverage_flag2$sample <- gsub("\\.", "_", coverage_flag2$sample)
+
+# generate nicknames
+generateNickname <- function(name) {
+  nickname <- NA_character_ 
+  if(str_detect(name, "Sediment_Metatranscriptome")) {
+    matches <- str_match(name, "Sediment_Metatranscriptome_(\\d+)_([A-Z]+\\d*)")
+    nickname <- paste0("MT", matches[,2], "_", matches[,3])
+    if(str_detect(name, "Raw_Count")) nickname <- paste0(nickname, "_rc")
+  } else {
+    nickname <- name 
+    }
+  nickname <- str_replace_all(nickname, "[- ]", "_")
+  return(nickname)
+}
+
+# Then apply this function to your dataframe
+coverage_flag2$Nickname <- sapply(coverage_flag2$sample, generateNickname)
+
+# Add new columns: "sample_ID", "starting_oxygen", "week", "raw_count"
+coverage_flag2 <- coverage_flag2 %>%
+  mutate(
+    sample_ID = as.numeric(str_extract(Nickname, "(?<=(MT))\\d+")), 
+    starting_oxygen = case_when(
+      str_detect(Nickname, "_LOW") ~ "low",
+      str_detect(Nickname, "_HOW") ~ "high",
+      TRUE ~ NA_character_), 
+    week = as.numeric(str_extract(Nickname, "(?<=_(LOW|HOW))\\d+")), 
+    raw_count = if_else(str_detect(Nickname, "_rc$"), "raw count", "normalized coverage"), 
+    genome = "Acidovorax"
+    )
+```
+
+```{r}
+# Save the modified dataframe
+write.csv(coverage_flag2, "acidovorax_MTX_flagellin2548498152_coverage_normalized_metadata.csv", row.names = TRUE)
+```
+
+Plotting Acidovorax autoinducer synthase expression time course: 
+```{r}
+# separate raw couts from normalized coverage
+raw_flag2 <- coverage_flag2 %>% 
+  filter(grepl("raw count", raw_count, fixed = TRUE))
+
+norm_flag2 <- coverage_flag2 %>% 
+  filter(grepl("normalized coverage", raw_count, fixed = TRUE))
+
+# within the normalized coverage data, separate high and low oxygen conditions
+HOW_flag2 <- raw_flag2 %>% 
+  filter(grepl("high", starting_oxygen, fixed = TRUE))
+# Convert coverage to numeric 
+HOW_flag2$coverage <- as.numeric(as.character(HOW_flag2$coverage))
+
+
+LOW_flag2 <- raw_flag2 %>% 
+  filter(grepl("low", starting_oxygen, fixed = TRUE))
+# Convert coverage to numeric if it's not already
+LOW_flag2$coverage <- as.numeric(as.character(LOW_flag2$coverage))
+
+
+# Calculate averages for each week for the HOW data
+HOW_avg_flag2 <- HOW_flag2 %>%
+  group_by(week) %>%
+  summarise(average_coverage = mean(coverage)) %>%  
+  mutate(genome = "Acidovorax") 
+
+# Calculate averages for each week for the LOW data
+LOW_avg_flag2 <- LOW_flag2 %>%
+  group_by(week) %>%
+  summarise(average_coverage = mean(coverage, na.rm = TRUE))  %>%  
+  mutate(genome = "Acidovorax") 
+
+
+# Plot points and add average lines
+ggplot() + 
+  geom_point(data = HOW_flag2, aes(x = week, y = coverage, color = "HOW"), size = 2) +
+  geom_point(data = LOW_flag2, aes(x = week, y = coverage, color = "LOW"), size = 2) +
+  geom_line(data = HOW_avg_flag2, aes(x = week, y = average_coverage, color = "HOW"), linewidth = 1) + 
+  geom_line(data = LOW_avg_flag2, aes(x = week, y = average_coverage, color = "LOW"), linewidth = 1) +
+  xlab('week') +
+  ylab('flagellin2 raw counts normalized to rpoD abundance') +
+  scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14)) +
+  scale_color_manual(values = c("HOW" = "red", "LOW" = "blue"),
+                     name = "Acidovorax",  # Legend title
+                     labels = c("HOW" = "High initial oxygen", "LOW" = "Low initial oxygen")) +
+  geom_vline(xintercept = c(10.5)) +
+  my_theme
+```
+
+```{r}
+# put a zero in front of single digits
+# Convert to numeric only if all values are numbers
+if (all(grepl("^[0-9]+$", LOW_flag2$sample_ID))) {
+  LOW_flag2$sample_ID <- as.numeric(LOW_flag2$sample_ID)
+  LOW_flag2$sample_ID <- sprintf("%02d", LOW_flag2$sample_ID)
+} else {
+  warning("Not all values in 'sample_ID' are numbers.")
+}
+
+# The same for 'week'
+if (all(grepl("^[0-9]+$", LOW_flag2$week))) {
+  LOW_flag2$week <- as.numeric(LOW_flag2$week)
+  LOW_flag2$week <- sprintf("%02d", LOW_flag2$week)
+} else {
+  warning("Not all values in 'week' are numbers.")
+}
+
+LOW_flag2$sample_ID <- str_pad(LOW_flag2$sample_ID, width = 3, pad = "0")
+LOW_flag2$week <- str_pad(LOW_flag2$week, width = 2, pad = "0")
+
+# add column with replicate identifiers (A, B, C, D)
+LOW_flag2_rep <- LOW_flag2 %>%
+  group_by(week) %>%
+  arrange(.,sample_ID) %>%
+  mutate(replicate = LETTERS[row_number()]) %>%
+  ungroup()
+
+#convert week values back to numeric
+LOW_flag2_rep$week <- as.numeric(as.character(LOW_flag2_rep$week))
+
+# plot that includes the synthase
+ggplot() + 
+  geom_point(data = LOW_flag2_rep, aes(x = week, y = coverage, color = "LOW_a", shape = replicate), size = 3) +
+  geom_point(data = LOW_synth_rep, aes(x = week, y = coverage, color = "LOW", shape = replicate), size = 3) +
+  xlab('week') +
+  ylab('Raw counts normalized to rpoD abundance') +
+  scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14)) +
+  scale_color_manual(values = c("LOW_a"= "blue","LOW" = "cornflowerblue"),
+                     name = "Initial oxygen tension and strain",  
+                     labels = c("LOW_a"= "Low O2: Acidovorax flagellin2",
+                                "LOW" = "Low O2: Acidovorax synthase")) +
+  geom_vline(xintercept = c(10.1)) + 
+  scale_y_continuous(trans='log10', labels = function(x) format(x, scientific = FALSE), limits = c(0.001,30)) +
+  my_theme
+
+# plot with 31/32 synthase
+# plot
+ggplot() + 
+  geom_point(data = LOW_flag2_rep, aes(x = week, y = coverage, color = "LOW_a", shape = replicate), size = 3) +
+  geom_point(data = LOW_synth_rep, aes(x = week, y = coverage, color = "LOW", shape = replicate), size = 3) +
+  geom_point(data = LOW_rep, aes(x = week, y = coverage, color = "LOW3", shape = replicate), size = 3) +
+  xlab('week') +
+  ylab('Raw counts normalized to rpoD abundance') +
+  scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14)) +
+  scale_color_manual(values = c("LOW_a"= "blue","LOW" = "cornflowerblue", "LOW3" = "black"),
+                     name = "Initial oxygen tension and strain",  
+                     labels = c("LOW_a"= "Low O2: Acidovorax flagellin2",
+                                "LOW" = "Low O2: Acidovorax synthase",
+                                "LOW3"="Low O2: 31/32 synthase")) +
+  geom_vline(xintercept = c(10.1)) + 
+  scale_y_continuous(trans='log10', labels = function(x) format(x, scientific = FALSE),  limits = c(0.001,30)) +
+  my_theme
+```
+# All gene correlation between Acidovorax MTX and 31/32 MTX genes
+```{r}
+# Load the data for both species
+Mtund <- read.csv("31-32_MTX_coverage_rpoS_normalized.csv", row.names = 1)
+Acido <- read.csv("acidovorax_MTX_coverage_rpoD_normalized.csv", row.names = 1)
+
+# Remove the last 4 digits and the period from the end of the column names in Mtund_other
+colnames(Mtund) <- gsub("\\.\\d{4}\\.?$", "", colnames(Mtund))
+
+# Remove the last 4 digits and the period from the end of the column names in Acido_other
+colnames(Acido) <- gsub("\\.\\d{4}\\.?$", "", colnames(Acido))
+
+
+# Filter columns containing "Raw.Count" and those that don't for Mtund
+Mtund_raw_count <- Mtund[, grep("Raw.Count", colnames(Mtund))]
+Mtund_other <- Mtund[, !grepl("Raw.Count", colnames(Mtund))]
+
+# Filter columns containing "Raw.Count" and those that don't for Acido
+Acido_raw_count <- Acido[, grep("Raw.Count", colnames(Acido))]
+Acido_other <- Acido[, !grepl("Raw.Count", colnames(Acido))]
+
+# Filter columns containing "LOW" or "HOW"
+low_columns <- grep("LOW", colnames(Mtund_other), value = TRUE)
+how_columns <- grep("HOW", colnames(Mtund_other), value = TRUE)
+
+Mtund_low <- Mtund_other[, low_columns]
+Mtund_how <- Mtund_other[, how_columns]
+
+low_columns <- grep("LOW", colnames(Acido_other), value = TRUE)
+how_columns <- grep("HOW", colnames(Acido_other), value = TRUE)
+
+Acido_low <- Acido_other[, low_columns]
+Acido_how <- Acido_other[, how_columns]
+
+# Get the common set of column names
+common_cols <- intersect(colnames(Mtund_other), colnames(Acido_other))
+
+# Sort the common set of column names alphabetically
+sorted_cols <- sort(common_cols)
+
+# Reorder the columns of both data frames
+Mtund_other <- Mtund_other %>% select(all_of(sorted_cols))
+Acido_other <- Acido_other %>% select(all_of(sorted_cols))
+
+# Convert all values in a dataframe to numeric
+Mtund_other[] <- lapply(Mtund_other, as.numeric)
+Acido_other[] <- lapply(Acido_other, as.numeric)
+
+# Set the minimum number of non-missing values required for correlation test
+min_non_missing <- 3  # Adjust this value as needed
+
+# Initialize a list to store correlation results
+correlation_results <- list()
+
+# WARNING: this takes forever
+# Loop through each row of the first dataframe
+for (i in 1:nrow(Mtund_other)) {
+  gene_values_mtund <- as.numeric(Mtund_other[i, ])
+  
+  # Loop through each row of the second dataframe
+  for (j in 1:nrow(Acido_other)) {
+    gene_values_acido <- as.numeric(Acido_other[j, ])
+    
+    # Filter out missing or infinite values
+    finite_indices <- is.finite(gene_values_mtund) & is.finite(gene_values_acido)
+    
+    # Check if there are enough finite observations
+    if (sum(finite_indices) >= min_non_missing) {
+      # Perform correlation test
+      correlation <- cor.test(gene_values_mtund[finite_indices], gene_values_acido[finite_indices])
+      
+      # Store results in correlation_results list
+      correlation_results[[paste("Gene", i, "_vs_Gene", j, sep = "")]] <- list(
+        Gene1 = rownames(Mtund_other)[i],
+        Gene2 = rownames(Acido_other)[j],
+        R_coefficient = correlation$estimate,
+        p_value = correlation$p.value
+      )
+    }
+  }
+}
+
+# Print correlation results
+print(correlation_results)
+
+```
+
+Just try the LuxR receptor from Acidovorax vs. all the 31/32 genes across all experiments. 
+
+```{r}
+# Set the minimum number of non-missing values required for correlation test
+min_non_missing <- 3  # Adjust this value as needed
+
+# Select the gene from Acido_other to compare against all genes in Mtund_other
+gene_acido <- "2548497362"
+
+# Initialize vectors to store correlation results
+genes_mtund <- character()
+genes_acido <- character()
+R_coefficients <- numeric()
+p_values <- numeric()
+
+# Loop through each row of Mtund_other
+for (i in 1:nrow(Mtund_other)) {
+  gene_values_mtund <- as.numeric(Mtund_other[i, ])
+  
+  # Select the gene values from Acido_other
+  gene_values_acido <- as.numeric(Acido_other[gene_acido, ])
+  
+  # Filter out missing or infinite values
+  finite_indices <- is.finite(gene_values_mtund) & is.finite(gene_values_acido)
+  
+  # Check if there are enough finite observations
+  if (sum(finite_indices) >= min_non_missing) {
+    # Perform correlation test
+    correlation <- cor.test(gene_values_mtund[finite_indices], gene_values_acido[finite_indices])
+    
+    # Store results
+    genes_mtund <- c(genes_mtund, rownames(Mtund_other)[i])
+    genes_acido <- c(genes_acido, gene_acido)
+    R_coefficients <- c(R_coefficients, correlation$estimate)
+    p_values <- c(p_values, correlation$p.value)
+  }
+}
+
+# Create dataframe for correlation results
+correlation_results_df <- data.frame(
+  Gene_mtund = genes_mtund,
+  Gene_acido = genes_acido,
+  R_coefficient = R_coefficients,
+  p_value = p_values
+)
+
+# Print correlation results dataframe
+print(correlation_results_df)
+
+# sort list
+Mtun_all <- read.csv("31-32_MTX_coverage.csv", row.names = 1)
+
+# Convert row names to a column in Mtun_all
+Mtun_all$Gene_ID <- rownames(Mtun_all)
+
+# Merge significant_results with Mtun_all based on shared values in "Gene ID" and "Gene_mtund"
+merged_results <- merge(correlation_results_df, Mtun_all, by.x = "Gene_mtund", by.y = "Gene_ID", all.x = TRUE)
+
+# Filter rows with p-value less than 0.01
+significant_results <- subset(merged_results, p_value < 0.01)
+
+
+```
+
+
+Do this for high and low oxygen
+```{r}
+# Get the common set of column names
+common_cols_low <- intersect(colnames(Mtund_low), colnames(Acido_low))
+
+# Sort the common set of column names alphabetically
+sorted_cols_low <- sort(common_cols_low)
+
+# Reorder the columns of both data frames
+Mtund_low <- Mtund_low %>% select(all_of(sorted_cols_low))
+Acido_low <- Acido_low %>% select(all_of(sorted_cols_low))
+
+# Convert all values in a dataframe to numeric
+Mtund_low[] <- lapply(Mtund_low, as.numeric)
+Acido_low[] <- lapply(Acido_low, as.numeric)
+
+# Set the minimum number of non-missing values required for correlation test
+min_non_missing <- 3  # Adjust this value as needed
+
+# Select the gene from Acido_other to compare against all genes in Mtund_other
+gene_acido_low <- "2548497362"
+
+# Initialize vectors to store correlation results
+genes_mtund <- character()
+genes_acido <- character()
+R_coefficients <- numeric()
+p_values <- numeric()
+
+# Loop through each row of Mtund_other
+for (i in 1:nrow(Mtund_low)) {
+  gene_values_mtund <- as.numeric(Mtund_low[i, ])
+  gene_values_acido <- as.numeric(Acido_low[gene_acido_low, ])
+  finite_indices <- is.finite(gene_values_mtund) & is.finite(gene_values_acido)
+  if (sum(finite_indices) >= min_non_missing) {
+    correlation <- cor.test(gene_values_mtund[finite_indices], gene_values_acido[finite_indices])
+    genes_mtund <- c(genes_mtund, rownames(Mtund_low)[i])
+    genes_acido <- c(genes_acido, gene_acido_low)
+    R_coefficients <- c(R_coefficients, correlation$estimate)
+    p_values <- c(p_values, correlation$p.value)
+  }
+}
+
+# Create dataframe for correlation results
+correlation_results_low <- data.frame(
+  Gene_mtund = genes_mtund,
+  Gene_acido = genes_acido,
+  R_coefficient = R_coefficients,
+  p_value = p_values
+)
+
+# sort list
+# Merge significant_results with Mtun_all based on shared values in "Gene ID" and "Gene_mtund"
+merged_results_low <- merge(correlation_results_low, Mtun_all, by.x = "Gene_mtund", by.y = "Gene_ID", all.x = TRUE)
+
+# Filter rows with p-value less than 0.01
+significant_results_low <- subset(merged_results, p_value < 0.01)
+```
+
+# correlation between Acidovorax synthase and all other Acidovorax genes.
+High oxygen conditions
+```{r}
+# make data frame with just the Acidovorax synthase gene 2548497361
+acido_synth_how <- Acido_how[rownames(Acido_how) == "2548497361", ]
+
+min_non_missing <- 3
+
+# Initialize vectors to store correlation results
+genes_acido_synth_how <- character()
+genes_acido <- character()
+R_coefficients <- numeric()
+p_values <- numeric()
+
+# Loop through each row of acido_synth_how
+for (i in 1:nrow(acido_synth_how)) {
+  gene_values_acido_synth_how <- as.numeric(acido_synth_how[i, ])
+  
+  # Calculate correlation with each row of Acido_how
+  for (j in 1:nrow(Acido_how)) {
+    gene_values_acido <- as.numeric(Acido_how[j, ])
+    finite_indices <- is.finite(gene_values_acido_synth_how) & is.finite(gene_values_acido)
+    
+    if (sum(finite_indices) >= min_non_missing) {
+      correlation <- cor.test(gene_values_acido_synth_how[finite_indices], gene_values_acido[finite_indices])
+      genes_acido_synth_how <- c(genes_acido_synth_how, rownames(acido_synth_how)[i])
+      genes_acido <- c(genes_acido, rownames(Acido_how)[j])
+      R_coefficients <- c(R_coefficients, correlation$estimate)
+      p_values <- c(p_values, correlation$p.value)
+    }
+  }
+}
+
+# Create dataframe for correlation results
+correlation_results_how <- data.frame(
+  Gene_acido_synth_how = genes_acido_synth_how,
+  Gene_acido = genes_acido,
+  R_coefficient = R_coefficients,
+  p_value = p_values
+)
+
+# sort list
+
+Acido_all <- read.csv("acidovorax_MTX_coverage.csv", row.names = 1)
+
+Acido_all$Gene_ID <- rownames(Acido_all)
+# Merge significant_results with Acido_all based on shared values in "Gene ID" and "Gene_acido"
+merged_results_how <- merge(correlation_results_how, Acido_all, by.x = "Gene_acido", by.y = "Gene_ID", all.x = TRUE)
+
+# Filter rows with p-value less than 0.01
+significant_results_how <- subset(merged_results_how, p_value < 0.01)
+```
+
+```{r}
+# save the high oxygen merged results
+write.csv(merged_results_how, "acidovorax_MTX_synthase_correlation_HOW_genes.csv", row.names = TRUE)
+```
+
+Organize this by COG
+```{r}
+# load dataframe with the information about Acidovorax genes
+acidovorax_MTX_coverage <- read.csv("acidovorax_MTX_coverage_geneinfo.csv", row.names = 1)
+
+# Extract the desired text from the cells in the "COG function" column
+acidovorax_MTX_coverage$COG_function <- str_extract(acidovorax_MTX_coverage$COG_function, ">.*<")
+
+# Remove the leading ">" and trailing "<" characters
+acidovorax_MTX_coverage$COG_function <- gsub(">", "", acidovorax_MTX_coverage$COG_function)
+acidovorax_MTX_coverage$COG_function <- gsub("<", "", acidovorax_MTX_coverage$COG_function)
+
+# Remove "/a" that is after the first letter
+acidovorax_MTX_coverage$COG_function <- gsub("\\/a", "", acidovorax_MTX_coverage$COG_function)
+
+# Remove all text following "br href" in the "COG function" column
+acidovorax_MTX_coverage$COG_function <- gsub("br\\s+href.*", "", acidovorax_MTX_coverage$COG_function)
+
+acidovorax_MTX_coverage$Gene_ID <- rownames(acidovorax_MTX_coverage)
+```
+
+```{r}
+# Merge significant_results with Acido_all based on shared values in "Gene ID" and "Gene_acido"
+merged_results_how_info <- merge(correlation_results_how, acidovorax_MTX_coverage, by.x = "Gene_acido", by.y = "Gene_ID", all.x = TRUE)
+
+# Filter rows with p-value less than 0.01
+significant_results_how_info <- subset(merged_results_how_info, p_value < 0.01)
+```
+
+From these results, we can see that the expression of the transcriptional regulator tetR is positively correlated with the expression of the QS synthase.Since I believe tetR can control biofilm in Acidovorax, let's do the same thing but with tetR as our query instead of the synthase. 
+
+```{r}
+# make data frame with just the Acidovorax tetR gene 2548500820
+acido_tetR_how <- Acido_how[rownames(Acido_how) == "2548500820", ]
+
+min_non_missing <- 3
+
+# Initialize vectors to store correlation results
+genes_acido_tetR_how <- character()
+genes_acido <- character()
+R_coefficients <- numeric()
+p_values <- numeric()
+
+# Loop through each row of acido_tetR_how
+for (i in 1:nrow(acido_tetR_how)) {
+  gene_values_acido_tetR_how <- as.numeric(acido_tetR_how[i, ])
+  
+  # Calculate correlation with each row of Acido_how
+  for (j in 1:nrow(Acido_how)) {
+    gene_values_acido <- as.numeric(Acido_how[j, ])
+    finite_indices <- is.finite(gene_values_acido_tetR_how) & is.finite(gene_values_acido)
+    
+    if (sum(finite_indices) >= min_non_missing) {
+      correlation <- cor.test(gene_values_acido_tetR_how[finite_indices], gene_values_acido[finite_indices])
+      genes_acido_tetR_how <- c(genes_acido_tetR_how, rownames(acido_tetR_how)[i])
+      genes_acido <- c(genes_acido, rownames(Acido_how)[j])
+      R_coefficients <- c(R_coefficients, correlation$estimate)
+      p_values <- c(p_values, correlation$p.value)
+    }
+  }
+}
+
+# Create dataframe for correlation results
+correlation_results_tetR_how <- data.frame(
+  Gene_acido_tetR_how = genes_acido_tetR_how,
+  Gene_acido = genes_acido,
+  R_coefficient = R_coefficients,
+  p_value = p_values
+)
+
+
+# Merge significant_results with Acido_all based on shared values in "Gene ID" and "Gene_acido"
+merged_results_how_tetR_info <- merge(correlation_results_tetR_how, acidovorax_MTX_coverage, by.x = "Gene_acido", by.y = "Gene_ID", all.x = TRUE)
+
+# Filter rows with p-value less than 0.01
+significant_results_how_tetR_info <- subset(merged_results_how_tetR_info, p_value < 0.01)
+```
+
+# correlation between 31/32 synthase and Acidovorax genes
+Now I want to look at the correlation between the 31/32 synthase and all the genes in Acidovorax. 
+
+```{r}
+# LOW OXYGEN
+
+# Select the gene from 31/32 to compare against all genes in Acidovorax
+gene_Mtund_low <- "2574195741"
+
+# Set the minimum number of non-missing values required for correlation test
+min_non_missing <- 3  # Adjust this value as needed
+
+# Initialize vectors to store correlation results
+genes_mtund <- character()
+genes_acido <- character()
+R_coefficients <- numeric()
+p_values <- numeric()
+
+# Loop through each row of Mtund_other
+for (i in 1:nrow(Acido_low)) {
+  gene_values_acido <- as.numeric(Acido_low[i, ])
+  gene_values_mtund <- as.numeric(Mtund_low[gene_Mtund_low, ])
+  finite_indices <- is.finite(gene_values_acido) & is.finite(gene_values_mtund)
+  if (sum(finite_indices) >= min_non_missing) {
+    correlation <- cor.test(gene_values_acido[finite_indices], gene_values_mtund[finite_indices])
+    genes_acido <- c(genes_acido, rownames(Acido_low)[i])
+    genes_mtund <- c(genes_mtund, gene_Mtund_low)
+    R_coefficients <- c(R_coefficients, correlation$estimate)
+    p_values <- c(p_values, correlation$p.value)
+  }
+}
+
+# Create dataframe for correlation results
+correlation_results_low2 <- data.frame(
+  Gene_mtund = genes_mtund,
+  Gene_acido = genes_acido,
+  R_coefficient = R_coefficients,
+  p_value = p_values
+)
+
+# sort list
+# Merge significant_results with Mtun_all based on shared values in "Gene ID" and "Gene_mtund"
+merged_results_low2 <- merge(correlation_results_low2, Acido_all, by.x = "Gene_acido", by.y = "Gene_ID", all.x = TRUE)
+
+# Filter rows with p-value less than 0.01
+significant_results_low2 <- subset(merged_results_low2, p_value < 0.01)
+```
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-## anthranilate expression
+# 31/32 anthranilate expression
 
 31/32 anthranilate synthase/tundrenone expression: 
   
@@ -1036,7 +1740,7 @@ coverage_anth <- read.csv("31-32_MTX_anthranilate1_coverage.csv")
 # generate nicknames
 generateNickname <- function(name) {
   nickname <- NA_character_ # Default to NA character vector
-  
+   
   if(str_detect(name, "Sediment Metatranscriptome")) {
     matches <- str_match(name, "Sediment Metatranscriptome (\\d+)_([A-Z0-9]+)")
     nickname <- paste0("MT", matches[,2], "_", matches[,3])
