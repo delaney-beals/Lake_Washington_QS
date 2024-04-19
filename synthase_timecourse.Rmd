@@ -1,21 +1,71 @@
 ---
-title: "Synthase expression time course"
+title: "Lake Washington microcosms: N-acyl-homoserine lactone synthase expression time course"
 output:
   pdf_document: default
   html_document:
     df_print: paged
+editor_options: 
+  markdown: 
+    wrap: sentence
 ---
 
+# Using metatranscriptomic data to find evidence of 3-OH-C10-HSL-mediated interspecies interactions in Lake Washington methane-fed microcosms 
+
+This analysis is based on the metatranscriptomic data associated with the following study: Zheng Y, Wang H, Yu Z, Haroon F, Hernández ME, Chistoserdova L. Metagenomic Insight into Environmentally Challenged Methane-Fed Microbial Communities.
+Microorganisms.
+2020 Oct 20;8(10):1614.
+doi: 10.3390/microorganisms8101614.
+PMID: 33092280; PMCID: PMC7589939.
+
+All of the data sets are available on JGI/IMG under the study name "Freshwater sediment methanotrophic microbial communities from Lake Washington under simulated oxygen tension".
+
+The **main goal** of this analysis is to determine whether there is a connection or coordination between the quorum sensing systems and their regulons in *Acidovorax* spp.
+and *Methylobacter tundripaludum* 31/32 in methane-fed microcosms incubating for 14 weeks at two different oxygen tensions.
+We are interested in these two community members specifically because we know they both synthesize and use the quorum sensing signal 3-OH-C10 acyl homoserine lactone.
+
+[Description of microcosm experiment conditions:]{.underline}
+
+-   Lake Washington sediment was added to media and supplied either high oxygen (HOW) or low oxygen (LOW).
+    Four replicates (A, B, C, D) were made for each of the two oxygen tensions.
+
+-   Microcosms were incubated for three weeks.
+    At the end of the three weeks, cultures were passaged into fresh media.
+
+-   Starting at week 4, nucleic acid extraction (DNA and RNA) was conducted every week and used for metagenomic and metatranscriptomic analysis.
+
+-   After DNA/RNA sampling on week 10, the oxygen tensions of the microcosms were switched, so that all samples starting at high oxygen were now low oxygen and vice versa.
+
+-   These new oxygen tensions were continued for 4 more weeks of passaging and sampling, ending at week 14.
+
+-   Microcosm/sample names are named based on their **starting oxygen tension**, so "HOW14" starting at high oxygen but is at hypoxic conditions at the 14 week sampling time point.
+
+[Description of metatranscriptomic data:]{.underline}
+
+There are a lot of RNAseq data sets associated with this study.
+I am primarily interested in the metatranscriptomes of *Acidovorax* spp.
+and *Methylobacter tundripaludum* 31/32 since I know they share a QS signal.
+Therefore, I am using the metatranscriptomic data sets that have been aligned to either *Acidovorax* *radicis* 35 or *Methylobacter tundripaludum* 31/32 reference genomes, rather than using the accompanying metagenome as the reference genome.
+
 # Synthase expression time course
-I want to make a plot where time in weeks is on the  x axis and pfam00765 presence or absence is on the y axis. I will use the metatranscriptomes from each week aligned to the 31/32 and Acidovorax. 
 
-Go to IMG/JGI, then OMICS > RNAseq, search for "Lake Washington" and select the number link under the "Total RNA seq data sets tab" in the row corresponding to the study: "Freshwater sediment methanotrophic microbial communities from Lake Washington under simulated oxygen tension" (will be 963 or so studies).
+I want to make a plot where time in weeks is on the x axis and pfam00765 presence or absence is on the y axis.
+I will use the metatranscriptomes from each week aligned to the 31/32 and Acidovorax.
 
-I am only interested in the metatranscriptome data sets aligned to either Acidovorax or M. tundripaludum 31/32, so I will sort all the data sets by filtering the column based on one of these reference data sets. Then click "Select All" and go to the "Multiple sample analysis" tab in gray on the same page. Then keep all of the standard parameters and click "Gene expression summary". Then "Select All" rows in the resulting table and Export. Copy and paste the results from the downloaded text file into excel to save as a csv or xlxs file. Open that file.
+Go to IMG/JGI, then OMICS \> RNAseq, search for "Lake Washington" and select the number link under the "Total RNA seq data sets tab" in the row corresponding to the study: "Freshwater sediment methanotrophic microbial communities from Lake Washington under simulated oxygen tension" (will be 963 or so studies).
 
-Search for "homoserine lactone" and in the "Gene product" column. Save the rows that correspond to these genes and save them in a new xlxs and transpose them so study names are the row names and coverage is the value. The experimental data is saved in the long title names for each row and is not easy to sort, so we will make new columns in our table that pulls out the metadata for each sample. 
+I am only interested in the metatranscriptome data sets aligned to either Acidovorax or M.
+tundripaludum 31/32, so I will sort all the data sets by filtering the column based on one of these reference data sets.
+Then click "Select All" and go to the "Multiple sample analysis" tab in gray on the same page.
+Then keep all of the standard parameters and click "Gene expression summary".
+Then "Select All" rows in the resulting table and Export.
+Copy and paste the results from the downloaded text file into excel to save as a csv or xlxs file.
+Open that file.
 
-```{r}
+Search for "homoserine lactone" and in the "Gene product" column.
+Save the rows that correspond to these genes and save them in a new xlxs and transpose them so study names are the row names and coverage is the value.
+The experimental data is saved in the long title names for each row and is not easy to sort, so we will make new columns in our table that pulls out the metadata for each sample.
+
+```{r message=FALSE, warning=FALSE}
 library(dplyr)
 library(tidyr)
 library(ggplot2)
@@ -34,30 +84,26 @@ my_theme <- theme_bw() +
                 )
 ```
 
-
 ```{r}
 # Load the data
 coverage <- read.csv("31-32_MTX_pfam0765_coverage.csv")
 
-# generate nicknames
+# generate nicknames function
 generateNickname <- function(name) {
   nickname <- NA_character_ # Default to NA character vector
-  
   if(str_detect(name, "Sediment Metatranscriptome")) {
     matches <- str_match(name, "Sediment Metatranscriptome (\\d+)_([A-Z0-9]+)")
     nickname <- paste0("MT", matches[,2], "_", matches[,3])
     if(str_detect(name, "Raw Count")) nickname <- paste0(nickname, "_rc")
   } else {
-    nickname <- name # Default case
+    nickname <- name 
   }
-  
   # Replace dashes and spaces with underscores for all nicknames
   nickname <- str_replace_all(nickname, "[- ]", "_")
-  
   return(nickname)
 }
 
-# Then apply this function to your dataframe
+# Then apply this function to the dataframe
 coverage$Nickname <- sapply(coverage$sample, generateNickname)
 
 # Add new columns: "sample_ID", "starting_oxygen", "week", "raw_count"
@@ -72,6 +118,8 @@ coverage <- coverage %>%
     raw_count = if_else(str_detect(Nickname, "_rc$"), "raw count", "normalized coverage"), 
     genome = "31-32"
     )
+
+head(coverage)
 ```
 
 ```{r}
@@ -79,11 +127,11 @@ coverage <- coverage %>%
 write.csv(coverage, "31-32_MTX_pfam0765_coverage_metadata.csv", row.names = TRUE)
 ```
 
-Okay now my dataframe looks good and I can organize everything by the experimental details. 
-Let's make a plot of the normalized coverage of pfam0765 (homoserine lactone synthetase) over time for metatranscriptome datasets aligned to the 31/32 genome. 
+Okay now my dataframe looks good and I can organize everything by the experimental details.
+Let's make a plot of the normalized coverage of pfam0765 (homoserine lactone synthetase) over time for metatranscriptome datasets aligned to the 31/32 genome.
 
 ```{r}
-# separate raw couts from normalized coverage
+# separate raw counts from normalized coverage
 raw <- coverage %>% 
   filter(grepl("raw count", raw_count, fixed = TRUE))
 
@@ -124,35 +172,17 @@ ggplot() +
   geom_vline(xintercept = c(10.5)) +
   my_theme
 ```
-For 31/32, the high initial oxygen samples had very low expression of the homoserine lactone synthetase for weeks 4-10 (oxic conditions), then as soon as the oxygen tension was switched after week 10 (black vertical line), the same samples now had very high increases of expression of this synthetase. For low oxygen conditions, the expression was steady and a bit higher than HO weeks at the same time points, but then peaked at the late weeks 9 and 10, when conditions wer still hypoxic. As soon as the switch happened and these samples had oxygen, the expression immediately dropped and stayed very low. 
- 
-
+For 31/32, the high initial oxygen samples had very low expression of the homoserine lactone synthetase for weeks 4-10 (oxic conditions), then as soon as the oxygen tension was switched after week 10 (black vertical line), the same samples now had very high increases of expression of this synthetase.
+For low oxygen conditions, the expression was steady and a bit higher than HO weeks at the same time points, but then peaked at the late weeks 9 and 10, when conditions wer estill hypoxic.
+As soon as the switch happened and these samples had oxygen, the expression immediately dropped and stayed very low.
 
 Now do this same process for Acidovorax and the "autoinducer synthase" product.
 
 ```{r}
 # Load the data
-coverage_acido <- read.csv("acidovorax_MT_synthase_coverage.csv")
+coverage_acido <- read.csv("acidovorax_MTX_synthase_coverage.csv")
 
-# generate nicknames
-generateNickname <- function(name) {
-  nickname <- NA_character_ # Default to NA character vector
-  
-  if(str_detect(name, "Sediment Metatranscriptome")) {
-    matches <- str_match(name, "Sediment Metatranscriptome (\\d+)_([A-Z0-9]+)")
-    nickname <- paste0("MT", matches[,2], "_", matches[,3])
-    if(str_detect(name, "Raw Count")) nickname <- paste0(nickname, "_rc")
-  } else {
-    nickname <- name # Default case
-  }
-  
-  # Replace dashes and spaces with underscores for all nicknames
-  nickname <- str_replace_all(nickname, "[- ]", "_")
-  
-  return(nickname)
-}
-
-# Then apply this function to your dataframe
+# Then apply the generateNickname function to the dataframe
 coverage_acido$Nickname <- sapply(coverage_acido$sample, generateNickname)
 
 # Add new columns: "sample_ID", "starting_oxygen", "week", "raw_count"
@@ -167,6 +197,8 @@ coverage_acido <- coverage_acido %>%
     raw_count = if_else(str_detect(Nickname, "_rc$"), "raw count", "normalized coverage"), 
     genome = "Acidovorax"
     )
+
+head(coverage_acido)
 ```
 
 ```{r}
@@ -174,7 +206,8 @@ coverage_acido <- coverage_acido %>%
 write.csv(coverage_acido, "acidovorax_MTX_syntase_coverage_metadata.csv", row.names = TRUE)
 ```
 
-Plotting Acidovorax autoinducer synthase expression time course: 
+Plotting Acidovorax autoinducer synthase expression time course:
+
 ```{r}
 # separate raw couts from normalized coverage
 raw_a <- coverage_acido %>% 
@@ -189,12 +222,10 @@ HOW_a <- norm_a %>%
 # Convert coverage to numeric 
 HOW_a$coverage <- as.numeric(as.character(HOW_a$coverage))
 
-
 LOW_a <- norm_a %>% 
   filter(grepl("low", starting_oxygen, fixed = TRUE))
 # Convert coverage to numeric if it's not already
 LOW_a$coverage <- as.numeric(as.character(LOW_a$coverage))
-
 
 # Calculate averages for each week for the HOW data
 HOW_avg_a <- HOW_a %>%
@@ -207,19 +238,6 @@ LOW_avg_a <- LOW_a %>%
   group_by(week) %>%
   summarise(average_coverage = mean(coverage, na.rm = TRUE))  %>%  
   mutate(genome = "Acidovorax") 
-
-# plot just the points 
-ggplot() + 
-  geom_point(data = HOW_a, aes(x = week, y = coverage, color = "HOW"), size = 2) +
-  geom_point(data = LOW_a, aes(x = week, y = coverage, color = "LOW"), size = 2) +
-  xlab('week') +
-  ylab('coverage') +
-  scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14)) +
-  scale_color_manual(values = c("HOW" = "red", "LOW" = "blue"),
-                     name = "Acidovorax",  # Legend title
-                     labels = c("HOW" = "High initial oxygen", "LOW" = "Low initial oxygen")) +
-  geom_vline(xintercept = c(10.5)) +
-  my_theme
 
 # Plot points and add average lines
 ggplot() + 
@@ -236,18 +254,18 @@ ggplot() +
   geom_vline(xintercept = c(10.5)) +
   my_theme
 ```
-For Acidovorax, in the low oxygen conditions, there were only three individual samples that had any expression greater than 0: MT2_LOW4, MT28_LOW6, and MT97_LOW12. In high oxygen samples, there were more replicates that had expression of the synthase, but it was still less than half of all replicates. 
+For Acidovorax, in the low oxygen conditions, there were only three individual samples that had any expression greater than 0: MT2_LOW4, MT28_LOW6, and MT97_LOW12.In high oxygen samples, there were more replicates that had expression of the synthase, but it was still less than half of all replicates.
 
+Want to combine the 31/32 and Acidovorax average expression plots:
 
-Want to combine the 31/32 and Acidovorax average expressions:
 ```{r}
 ggplot() + 
-  geom_line(data = HOW_avg_a, aes(x = week, y = average_coverage, color = "HOW_a"), linetype = "dotted", size = 1) +
-  geom_line(data = LOW_avg_a, aes(x = week, y = average_coverage, color = "LOW_a"), linetype = "dotted", size = 1) +
-  geom_line(data = HOW_avg, aes(x = week, y = average_coverage, color = "HOW"), size = 1) +
-  geom_line(data = LOW_avg, aes(x = week, y = average_coverage, color = "LOW"), size = 1) +
+  geom_line(data = HOW_avg_a, aes(x = week, y = average_coverage, color = "HOW_a"), linetype = "dotted", linewidth = 1) +
+  geom_line(data = LOW_avg_a, aes(x = week, y = average_coverage, color = "LOW_a"), linetype = "dotted", linewidth = 1) +
+  geom_line(data = HOW_avg, aes(x = week, y = average_coverage, color = "HOW"), linewidth = 1) +
+  geom_line(data = LOW_avg, aes(x = week, y = average_coverage, color = "LOW"), linewidth = 1) +
   xlab('week') +
-  ylab('coverage') +
+  ylab('coverage of acyl-HSL synthase expression') +
   scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14)) +
   scale_color_manual(values = c("HOW_a"= "red","LOW_a" = "blue","HOW" = "red", "LOW" = "blue"),
                      name = "Initial oxygen tension and strain",  
@@ -257,12 +275,12 @@ ggplot() +
 
 #log(average coverage)
 ggplot() + 
-  geom_line(data = HOW_avg_a, aes(x = week, y = log(average_coverage), color = "HOW_a"), linetype = "dotted", size = 1) +
-  geom_line(data = LOW_avg_a, aes(x = week, y = log(average_coverage), color = "LOW_a"), linetype = "dotted", size = 1) +
-  geom_line(data = HOW_avg, aes(x = week, y = log(average_coverage), color = "HOW"), size = 1) +
-  geom_line(data = LOW_avg, aes(x = week, y = log(average_coverage), color = "LOW"), size = 1) +
+  geom_line(data = HOW_avg_a, aes(x = week, y = log(average_coverage), color = "HOW_a"), linetype = "dotted", linewidth = 1) +
+  geom_line(data = LOW_avg_a, aes(x = week, y = log(average_coverage), color = "LOW_a"), linetype = "dotted", linewidth = 1) +
+  geom_line(data = HOW_avg, aes(x = week, y = log(average_coverage), color = "HOW"), linewidth = 1) +
+  geom_line(data = LOW_avg, aes(x = week, y = log(average_coverage), color = "LOW"), linewidth = 1) +
   xlab('week') +
-  ylab('log(coverage)') +
+  ylab('log(coverage) of acyl-HSL synthase expression') +
   scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14)) +
   scale_color_manual(values = c("HOW_a"= "red","LOW_a" = "blue","HOW" = "red", "LOW" = "blue"),
                      name = "Initial oxygen tension and strain",  
@@ -270,13 +288,14 @@ ggplot() +
   geom_vline(xintercept = c(10.5)) +
   my_theme
 ```
+In low oxygen conditions, the Acidovorax synthase and the 31/32 synthase seem to be uncoordinated. In high oxygen conditions, it appears that when 31/32 synthase expression is high, so is the Acidovorax synthase expression. This doesn't suggest anything about interspecies interactions, however, as this could be a result of each strain responding individually to the oxygen tensions that they are exposed to. In that case, it seems like 31/32 synthase expression is highest in low oxygen conditions, while Acidovorax synthase expression is higher in high oxygen conditions, but the trend is less obvious.
 
 
 ## Normalize 31/32 to RpoS
-There's not an obvious pattern between the acidovorax and the 31/32 synthase expression, so let's normalize each to a housekeeping gene and do the comparison again. 
+This in theory will account for abundance of either strain so that we don't assume there is a ton of synthase expression when in reality there is just a lot of that strain that is expressing a low amount of synthase.
 
 ```{r}
-# Load the data and remove the first two columns
+# Load the data and remove the first two columns to leave just the numeric values
 coverage <- read.csv("31-32_MTX_coverage.csv", row.names = 1)[, -c(1, 2)]
 
 # Capture original row and column names
@@ -297,6 +316,8 @@ normalized_df <- as.data.frame(normalized_df)
 # Reassign the original row and column names
 rownames(normalized_df) <- original_row_names
 colnames(normalized_df) <- original_column_names
+
+head(normalized_df)
 ```
 
 ```{r}
@@ -304,7 +325,13 @@ colnames(normalized_df) <- original_column_names
 write.csv(normalized_df, "31-32_MTX_coverage_rpoS_normalized.csv", row.names = TRUE)
 ```
 
-### 31/32 synthase time course
+Find the row corresponding to the homoserine lactone synthetase gene (Gene_ID = 2574195741).
+Copy this row and the first row containing column names into a new spreadsheet.
+Transpose the data so that study names are the row names and normalized synthetase gene expression values are the values.
+Delete extra heading rows and just have the "sample" and the "coverage" as the two column names.
+Save as a csv.
+
+### Normalized 31/32 synthase time course
 ```{r}
 # Load the data
 coverage <- read.csv("31-32_MTX_pfam0765_normalized_coverage.csv")
@@ -341,6 +368,8 @@ coverage <- coverage %>%
     raw_count = if_else(str_detect(Nickname, "_rc$"), "raw count", "normalized coverage"), 
     genome = "31-32"
     )
+
+head(coverage)
 ```
 
 ```{r}
@@ -348,9 +377,7 @@ coverage <- coverage %>%
 write.csv(coverage, "31-32_MTX_pfam0765_coverage_metadata_normalized.csv", row.names = TRUE)
 ```
 
-Okay now my dataframe looks good and I can organize everything by the experimental details. 
-Let's make a plot of the normalized coverage of pfam0765 (homoserine lactone synthetase) over time for metatranscriptome datasets aligned to the 31/32 genome. 
-
+Now we will treat our normalized data set like we did the un-normalized data set by separating the data based on count type and oxygen tension.
 ```{r}
 # separate raw couts from normalized coverage
 raw <- coverage %>% 
@@ -385,7 +412,7 @@ ggplot() +
   geom_line(data = HOW_avg, aes(x = week, y = average_coverage, color = "HOW"), linewidth = 1) + 
   geom_line(data = LOW_avg, aes(x = week, y = average_coverage, color = "LOW"), linewidth = 1) +
   xlab('week') +
-  ylab('Coverage normalized to rpoS abundance') +
+  ylab('31/32 synthase coverage normalized to rpoS abundance') +
   scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14)) +
   scale_color_manual(values = c("HOW" = "red", "LOW" = "blue"),
                      name = "31/32",  # Legend title
@@ -393,15 +420,17 @@ ggplot() +
   geom_vline(xintercept = c(10.5)) +
   my_theme
 ```
-### 31/32 synthase time course (raw counts)
+With this new normalized plot, we can see that there is a lot of variation in the 31/32 synthase expression between replicate microcosms (represented by individual dots at each week). We also can see that our observation that 31/32 synthase expression is highest in low oxygen conditions holds true. It is interesting to see the dip in expression at week 12 after a peak at week 11. 
+
+### Normalized 31/32 synthase time course (raw counts)
+I am not sure which coverage values I should use for looking at the housekeeping gene-normalied data, so I will look at both. 
 ```{r}
 # Load the data
 coverage <- read.csv("31-32_MTX_pfam0765_coverage_metadata_normalized.csv")
 ```
 
-
 ```{r}
-# separate raw couts from normalized coverage
+# separate raw counts from normalized coverage
 raw <- coverage %>% 
   filter(grepl("raw count", raw_count, fixed = TRUE))
 
@@ -409,43 +438,43 @@ norm <- coverage %>%
   filter(grepl("normalized coverage", raw_count, fixed = TRUE))
 
 # within the normalized coverage data, separate high and low oxygen conditions
-HOW <- raw %>% 
+HOW_raw <- raw %>% 
   filter(grepl("high", starting_oxygen, fixed = TRUE))
 
-LOW <- raw %>% 
+LOW_raw <- raw %>% 
   filter(grepl("low", starting_oxygen, fixed = TRUE))
 
 # Calculate averages for each week for the HOW data
-HOW_avg <- HOW %>%
+HOW_avg_raw <- HOW %>%
   group_by(week) %>%
   summarise(average_coverage = mean(coverage, na.rm = TRUE))  %>%  
   mutate(genome = "31-32") 
 
 # Calculate averages for each week for the LOW data
-LOW_avg <- LOW %>%
+LOW_avg_raw <- LOW %>%
   group_by(week) %>%
   summarise(average_coverage = mean(coverage, na.rm = TRUE)) %>%  
   mutate(genome = "31-32") 
 
 # Plot points and add average lines
 ggplot() + 
-  geom_point(data = HOW, aes(x = week, y = coverage, color = "HOW"), size = 2) +
-  geom_point(data = LOW, aes(x = week, y = coverage, color = "LOW"), size = 2) +
-  geom_line(data = HOW_avg, aes(x = week, y = average_coverage, color = "HOW"), linewidth = 1) + 
-  geom_line(data = LOW_avg, aes(x = week, y = average_coverage, color = "LOW"), linewidth = 1) +
+  geom_point(data = HOW_raw, aes(x = week, y = coverage, color = "HOW"), size = 2) +
+  geom_point(data = LOW_raw, aes(x = week, y = coverage, color = "LOW"), size = 2) +
+  geom_line(data = HOW_avg_raw, aes(x = week, y = average_coverage, color = "HOW"), linewidth = 1) + 
+  geom_line(data = LOW_avg_raw, aes(x = week, y = average_coverage, color = "LOW"), linewidth = 1) +
   xlab('week') +
-  ylab('Raw counts normalized to rpoS abundance') +
+  ylab('31/32 synthase raw counts normalized to rpoS abundance') +
   scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14)) +
   scale_color_manual(values = c("HOW" = "red", "LOW" = "blue"),
-                     name = "31/32",  # Legend title
+                     name = "31/32",  
                      labels = c("HOW" = "High initial oxygen", "LOW" = "Low initial oxygen")) +
   geom_vline(xintercept = c(10.5)) +
   my_theme
 ```
+These data look the same as far as trends go as the other normalized plot, so I think as long as I am consistent when I move onto Acidovorax normalization, it shouldn't matter which of the coverage values I choose. 
 
 ## Normalize Acidovorax to RpoD
-There's not an obvious pattern between the acidovorax and the 31/32 synthase expression, so let's normalize each to a housekeeping gene and do the comparison again. 
-
+Acidovorax does not has an rpoS gene, so I will use rpoD, which should serve the same purpose in normalizing our expression data to the abundance of Acidovorax. 
 ```{r}
 # Load the data and remove the first two columns
 coverage <- read.csv("acidovorax_MTX_coverage.csv", row.names = 1)[, -c(1, 2)]
@@ -475,7 +504,7 @@ colnames(normalized_df) <- original_column_names
 write.csv(normalized_df, "acidovorax_MTX_coverage_rpoD_normalized.csv", row.names = TRUE)
 ```
 
-### Acidovorax synthase time course
+### Normalized Acidovorax synthase time course
 ```{r}
 # Load the data
 coverage_acido <- read.csv("acidovorax_MTX_synthase_coverage_normalized.csv")
@@ -519,7 +548,7 @@ coverage_acido <- coverage_acido %>%
 write.csv(coverage_acido, "acidovorax_MTX_synthase_coverage_normalized_metadata.csv", row.names = TRUE)
 ```
 
-Plotting Acidovorax autoinducer synthase expression time course: 
+Plotting Acidovorax autoinducer synthase expression time course (using normalized/not raw coverage values):
 ```{r}
 # separate raw couts from normalized coverage
 raw_a <- coverage_acido %>% 
@@ -534,12 +563,10 @@ HOW_a <- norm_a %>%
 # Convert coverage to numeric 
 HOW_a$coverage <- as.numeric(as.character(HOW_a$coverage))
 
-
 LOW_a <- norm_a %>% 
   filter(grepl("low", starting_oxygen, fixed = TRUE))
 # Convert coverage to numeric if it's not already
 LOW_a$coverage <- as.numeric(as.character(LOW_a$coverage))
-
 
 # Calculate averages for each week for the HOW data
 HOW_avg_a <- HOW_a %>%
@@ -553,19 +580,6 @@ LOW_avg_a <- LOW_a %>%
   summarise(average_coverage = mean(coverage, na.rm = TRUE))  %>%  
   mutate(genome = "Acidovorax") 
 
-# plot just the points 
-ggplot() + 
-  geom_point(data = HOW_a, aes(x = week, y = coverage, color = "HOW"), size = 2) +
-  geom_point(data = LOW_a, aes(x = week, y = coverage, color = "LOW"), size = 2) +
-  xlab('week') +
-  ylab('coverage') +
-  scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14)) +
-  scale_color_manual(values = c("HOW" = "red", "LOW" = "blue"),
-                     name = "Acidovorax",  # Legend title
-                     labels = c("HOW" = "High initial oxygen", "LOW" = "Low initial oxygen")) +
-  geom_vline(xintercept = c(10.5)) +
-  my_theme
-
 # Plot points and add average lines
 ggplot() + 
   geom_point(data = HOW_a, aes(x = week, y = coverage, color = "HOW"), size = 2) +
@@ -573,7 +587,7 @@ ggplot() +
   geom_line(data = HOW_avg_a, aes(x = week, y = average_coverage, color = "HOW"), linewidth = 1) + 
   geom_line(data = LOW_avg_a, aes(x = week, y = average_coverage, color = "LOW"), linewidth = 1) +
   xlab('week') +
-  ylab('Coverage normalized to rpoD abundance') +
+  ylab('Acidovorax synthase coverage normalized to rpoD abundance') +
   scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14)) +
   scale_color_manual(values = c("HOW" = "red", "LOW" = "blue"),
                      name = "Acidovorax",  # Legend title
@@ -581,8 +595,10 @@ ggplot() +
   geom_vline(xintercept = c(10.5)) +
   my_theme
 ```
+We can see from the y-axis that the normalized expression of Acidovorax synthase is much lower than the 31/32 synthase. The trends in Acidovorax synthase expression are still there after abundance normalization, where synthase expression is higher in high oxygen conditions and is quite low in low oxygen conditions, even after low oxygen microcosms were subjected to high oxygen tensions after the 10 week swtich. 
 
 ##Normalized 31/32 and Acidovorax time course
+Now let's look at both 31/32 and Acidovorax normalized synthase expression in the same plot. 
 ```{r}
 ggplot() + 
   geom_line(data = HOW_avg_a, aes(x = week, y = average_coverage, color = "HOW_a"), linetype = "dashed", size = 1) +
@@ -617,7 +633,7 @@ ggplot() +
   scale_y_continuous(trans='log10', labels = function(x) format(x, scientific = FALSE)) +
   my_theme
 ```
-
+Again, this shows us the same pattern as the data that wasn't normalized to abundance. There are some weeks where the synthase expression of both strains either both go up or both go down, but I think there is too much variability between replicates to say much more than what's already been said. 
 
 
 ## Acidovorax synthase vs. receptor time course
@@ -703,6 +719,7 @@ ggplot() +
 ```
 
 ##Normalized 31/32 synthase and Acidovorax receptor time course
+
 ```{r}
 # 31/32 synthase, acidovorax synthase, acidovorax receptor for HO and LO
 ggplot() + 
@@ -762,7 +779,6 @@ ggplot() +
   my_theme
 
 ```
-
 
 ```{r}
 # plotting with points
@@ -1014,7 +1030,9 @@ ggplot() +
   scale_y_continuous(trans='log10', labels = function(x) format(x, scientific = FALSE), limits = c(0.001,30)) +
   my_theme
 ```
+
 ## Acidovorax flagellin1 + synthase time course
+
 ```{r}
 # Load the data
 coverage_flag <- read.csv("acidovorax_MTX_flagellin2548501241_coverage_normalized.csv")
@@ -1058,7 +1076,8 @@ coverage_flag <- coverage_flag %>%
 write.csv(coverage_flag, "acidovorax_MTX_flagellin2548501241_coverage_normalized_metadata.csv", row.names = TRUE)
 ```
 
-Plotting Acidovorax autoinducer synthase expression time course: 
+Plotting Acidovorax autoinducer synthase expression time course:
+
 ```{r}
 # separate raw couts from normalized coverage
 raw_flag <- coverage_flag %>% 
@@ -1173,7 +1192,9 @@ ggplot() +
   scale_y_continuous(trans='log10', labels = function(x) format(x, scientific = FALSE),  limits = c(0.001,30)) +
   my_theme
 ```
+
 ## Acidovorax flagellin2 + synthase time course
+
 ```{r}
 # Load the data
 coverage_flag2 <- read.csv("acidovorax_MTX_flagellin2548498152_coverage_normalized.csv")
@@ -1217,7 +1238,8 @@ coverage_flag2 <- coverage_flag2 %>%
 write.csv(coverage_flag2, "acidovorax_MTX_flagellin2548498152_coverage_normalized_metadata.csv", row.names = TRUE)
 ```
 
-Plotting Acidovorax autoinducer synthase expression time course: 
+Plotting Acidovorax autoinducer synthase expression time course:
+
 ```{r}
 # separate raw couts from normalized coverage
 raw_flag2 <- coverage_flag2 %>% 
@@ -1332,7 +1354,9 @@ ggplot() +
   scale_y_continuous(trans='log10', labels = function(x) format(x, scientific = FALSE),  limits = c(0.001,30)) +
   my_theme
 ```
+
 # All gene correlation between Acidovorax MTX and 31/32 MTX genes
+
 ```{r}
 # Load the data for both species
 Mtund <- read.csv("31-32_MTX_coverage_rpoS_normalized.csv", row.names = 1)
@@ -1419,7 +1443,7 @@ print(correlation_results)
 
 ```
 
-Just try the LuxR receptor from Acidovorax vs. all the 31/32 genes across all experiments. 
+Just try the LuxR receptor from Acidovorax vs. all the 31/32 genes across all experiments.
 
 ```{r}
 # Set the minimum number of non-missing values required for correlation test
@@ -1483,8 +1507,8 @@ significant_results <- subset(merged_results, p_value < 0.01)
 
 ```
 
-
 Do this for high and low oxygen
+
 ```{r}
 # Get the common set of column names
 common_cols_low <- intersect(colnames(Mtund_low), colnames(Acido_low))
@@ -1542,8 +1566,9 @@ merged_results_low <- merge(correlation_results_low, Mtun_all, by.x = "Gene_mtun
 significant_results_low <- subset(merged_results, p_value < 0.01)
 ```
 
-# correlation between Acidovorax synthase and all other Acidovorax genes.
-High oxygen conditions
+#Correlation between Acidovorax synthase and all other Acidovorax genes.
+##High oxygen conditions
+
 ```{r}
 # make data frame with just the Acidovorax synthase gene 2548497361
 acido_synth_how <- Acido_how[rownames(Acido_how) == "2548497361", ]
@@ -1592,7 +1617,7 @@ Acido_all$Gene_ID <- rownames(Acido_all)
 merged_results_how <- merge(correlation_results_how, Acido_all, by.x = "Gene_acido", by.y = "Gene_ID", all.x = TRUE)
 
 # Filter rows with p-value less than 0.01
-significant_results_how <- subset(merged_results_how, p_value < 0.01)
+significant_results_how <- subset(merged_results_how, p_value < 0.05)
 ```
 
 ```{r}
@@ -1601,6 +1626,7 @@ write.csv(merged_results_how, "acidovorax_MTX_synthase_correlation_HOW_genes.csv
 ```
 
 Organize this by COG
+
 ```{r}
 # load dataframe with the information about Acidovorax genes
 acidovorax_MTX_coverage <- read.csv("acidovorax_MTX_coverage_geneinfo.csv", row.names = 1)
@@ -1629,7 +1655,7 @@ merged_results_how_info <- merge(correlation_results_how, acidovorax_MTX_coverag
 significant_results_how_info <- subset(merged_results_how_info, p_value < 0.01)
 ```
 
-From these results, we can see that the expression of the transcriptional regulator tetR is positively correlated with the expression of the QS synthase.Since I believe tetR can control biofilm in Acidovorax, let's do the same thing but with tetR as our query instead of the synthase. 
+From these results, we can see that the expression of the transcriptional regulator tetR is positively correlated with the expression of the QS synthase.Since I believe tetR can control biofilm in Acidovorax, let's do the same thing but with tetR as our query instead of the synthase.
 
 ```{r}
 # make data frame with just the Acidovorax tetR gene 2548500820
@@ -1678,8 +1704,97 @@ merged_results_how_tetR_info <- merge(correlation_results_tetR_how, acidovorax_M
 significant_results_how_tetR_info <- subset(merged_results_how_tetR_info, p_value < 0.01)
 ```
 
+##Low oxygen conditions
+
+```{r}
+# make data frame with just the Acidovorax synthase gene 2548497361
+acido_synth_low <- Acido_low[rownames(Acido_low) == "2548497361", ]
+
+min_non_missing <- 3
+
+# Initialize vectors to store correlation results
+genes_acido_synth_low <- character()
+genes_acido <- character()
+R_coefficients <- numeric()
+p_values <- numeric()
+
+# Loop through each row of acido_synth_low
+for (i in 1:nrow(acido_synth_low)) {
+  gene_values_acido_synth_low <- as.numeric(acido_synth_low[i, ])
+  
+  # Calculate correlation with each row of Acido_low
+  for (j in 1:nrow(Acido_low)) {
+    gene_values_acido <- as.numeric(Acido_low[j, ])
+    finite_indices <- is.finite(gene_values_acido_synth_low) & is.finite(gene_values_acido)
+    
+    if (sum(finite_indices) >= min_non_missing) {
+      correlation <- cor.test(gene_values_acido_synth_low[finite_indices], gene_values_acido[finite_indices])
+      genes_acido_synth_low <- c(genes_acido_synth_low, rownames(acido_synth_low)[i])
+      genes_acido <- c(genes_acido, rownames(Acido_low)[j])
+      R_coefficients <- c(R_coefficients, correlation$estimate)
+      p_values <- c(p_values, correlation$p.value)
+    }
+  }
+}
+
+# Create dataframe for correlation results
+correlation_results_low <- data.frame(
+  Gene_acido_synth_low = genes_acido_synth_low,
+  Gene_acido = genes_acido,
+  R_coefficient = R_coefficients,
+  p_value = p_values
+)
+
+# sort list
+
+Acido_all <- read.csv("acidovorax_MTX_coverage.csv", row.names = 1)
+
+Acido_all$Gene_ID <- rownames(Acido_all)
+# Merge significant_results with Acido_all based on shared values in "Gene ID" and "Gene_acido"
+merged_results_low <- merge(correlation_results_low, Acido_all, by.x = "Gene_acido", by.y = "Gene_ID", all.x = TRUE)
+
+# Filter rows with p-value less than 0.01
+significant_results_low <- subset(merged_results_low, p_value < 0.01)
+```
+
+```{r}
+# save the high oxygen merged results
+write.csv(merged_results_low, "acidovorax_MTX_synthase_correlation_LOW_genes.csv", row.names = TRUE)
+```
+
+Organize this by COG
+
+```{r}
+# load dataframe with the information about Acidovorax genes
+acidovorax_MTX_coverage <- read.csv("acidovorax_MTX_coverage_geneinfo.csv", row.names = 1)
+
+# Extract the desired text from the cells in the "COG function" column
+acidovorax_MTX_coverage$COG_function <- str_extract(acidovorax_MTX_coverage$COG_function, ">.*<")
+
+# Remove the leading ">" and trailing "<" characters
+acidovorax_MTX_coverage$COG_function <- gsub(">", "", acidovorax_MTX_coverage$COG_function)
+acidovorax_MTX_coverage$COG_function <- gsub("<", "", acidovorax_MTX_coverage$COG_function)
+
+# Remove "/a" that is after the first letter
+acidovorax_MTX_coverage$COG_function <- gsub("\\/a", "", acidovorax_MTX_coverage$COG_function)
+
+# Remove all text following "br href" in the "COG function" column
+acidovorax_MTX_coverage$COG_function <- gsub("br\\s+href.*", "", acidovorax_MTX_coverage$COG_function)
+
+acidovorax_MTX_coverage$Gene_ID <- rownames(acidovorax_MTX_coverage)
+```
+
+```{r}
+# Merge significant_results with Acido_all based on shared values in "Gene ID" and "Gene_acido"
+merged_results_low_info <- merge(correlation_results_low, acidovorax_MTX_coverage, by.x = "Gene_acido", by.y = "Gene_ID", all.x = TRUE)
+
+# Filter rows with p-value less than 0.01
+significant_results_low_info <- subset(merged_results_low_info, p_value < 0.01)
+```
+
 # correlation between 31/32 synthase and Acidovorax genes
-Now I want to look at the correlation between the 31/32 synthase and all the genes in Acidovorax. 
+
+Now I want to look at the correlation between the 31/32 synthase and all the genes in Acidovorax.
 
 ```{r}
 # LOW OXYGEN
@@ -1720,19 +1835,80 @@ correlation_results_low2 <- data.frame(
 
 # sort list
 # Merge significant_results with Mtun_all based on shared values in "Gene ID" and "Gene_mtund"
-merged_results_low2 <- merge(correlation_results_low2, Acido_all, by.x = "Gene_acido", by.y = "Gene_ID", all.x = TRUE)
+merged_results_low2 <- merge(correlation_results_low2, acidovorax_MTX_coverage, by.x = "Gene_acido", by.y = "Gene_ID", all.x = TRUE)
 
 # Filter rows with p-value less than 0.01
-significant_results_low2 <- subset(merged_results_low2, p_value < 0.01)
+significant_results_low2 <- subset(merged_results_low2, p_value < 0.05)
 ```
 
+Look at what genes are shared between the Acidovorax cognate synthase and the 31/32 synthase expression:
 
+```{r}
+shared_genes <- merge(significant_results_low2, significant_results_low_info, by = "Locus.Tag")
+```
 
+This results in nothing shared, which might suggest different effects when 31/32 is producing QS signal vs. when Acidovorax is producing QS signal.
+
+Look at what genes are shared between these correlations: Acidovorax sythase/Acidovorax genes (high oxygen) VS. 31-32 synthase/Acidovorax genes (low oxygen).
+Motivation: if Acidovorax has a QS-regulon that we can somewhat determine in high oxygen Lake Washington conditions/single culture, then how does the expresion of those same genes look when we look at expression of Acidovorax genes in low oxygen conditions in cases where 31/32 synthase expression is high and Acidovorax synthase expression is low?
+
+```{r}
+shared_genes2 <- merge(significant_results_low2, significant_results_how_info, by = "Locus.Tag")
+```
+
+# correlation between 31/32 MMO and Acidovorax genes
+
+Now I want to look at the correlation between the 31/32 synthase and all the genes in Acidovorax.
+
+```{r}
+# HIGH OXYGEN
+
+# Select the gene from 31/32 to compare against all genes in Acidovorax
+gene_Mtund_how <- "2574196574"
+
+# Set the minimum number of non-missing values required for correlation test
+min_non_missing <- 3  # Adjust this value as needed
+
+# Initialize vectors to store correlation results
+genes_mtund <- character()
+genes_acido <- character()
+R_coefficients <- numeric()
+p_values <- numeric()
+
+# Loop through each row of Mtund_other
+for (i in 1:nrow(Acido_how)) {
+  gene_values_acido <- as.numeric(Acido_how[i, ])
+  gene_values_mtund <- as.numeric(Mtund_how[gene_Mtund_how, ])
+  finite_indices <- is.finite(gene_values_acido) & is.finite(gene_values_mtund)
+  if (sum(finite_indices) >= min_non_missing) {
+    correlation <- cor.test(gene_values_acido[finite_indices], gene_values_mtund[finite_indices])
+    genes_acido <- c(genes_acido, rownames(Acido_how)[i])
+    genes_mtund <- c(genes_mtund, gene_Mtund_how)
+    R_coefficients <- c(R_coefficients, correlation$estimate)
+    p_values <- c(p_values, correlation$p.value)
+  }
+}
+
+# Create dataframe for correlation results
+correlation_results_how_mmo <- data.frame(
+  Gene_mtund = genes_mtund,
+  Gene_acido = genes_acido,
+  R_coefficient = R_coefficients,
+  p_value = p_values
+)
+
+# sort list
+# Merge significant_results with Mtun_all based on shared values in "Gene ID" and "Gene_mtund"
+merged_results_how_mmo <- merge(correlation_results_how_mmo, acidovorax_MTX_coverage, by.x = "Gene_acido", by.y = "Gene_ID", all.x = TRUE)
+
+# Filter rows with p-value less than 0.01
+significant_results_how_mmo <- subset(merged_results_how_mmo, p_value < 0.01)
+```
 
 # 31/32 anthranilate expression
 
-31/32 anthranilate synthase/tundrenone expression: 
-  
+31/32 anthranilate synthase/tundrenone expression:
+
 ```{r}
 # Load the data
 coverage_anth <- read.csv("31-32_MTX_anthranilate1_coverage.csv")
@@ -1777,8 +1953,8 @@ coverage_anth <- coverage_anth %>%
 write.csv(coverage_anth, "31-32_MTX_anthranilate1_coverage_metadata.csv", row.names = TRUE)
 ```
 
-Okay now my dataframe looks good and I can organize everything by the experimental details. 
-Let's make a plot of the normalized coverage of pfam0765 (homoserine lactone synthetase) over time for metatranscriptome datasets aligned to the 31/32 genome. 
+Okay now my dataframe looks good and I can organize everything by the experimental details.
+Let's make a plot of the normalized coverage of pfam0765 (homoserine lactone synthetase) over time for metatranscriptome datasets aligned to the 31/32 genome.
 
 ```{r}
 # separate raw couts from normalized coverage
@@ -1825,7 +2001,8 @@ ggplot() +
   my_theme
 ```
 
-Combining synthetase and anthranilate expression in 31/32: 
+Combining synthetase and anthranilate expression in 31/32:
+
 ```{r}
 ggplot() + 
   geom_line(data = HOW_avg_anth, aes(x = week, y = log(average_coverage), color = "HOW_anth"), linetype = "dotted", size = 1) +
@@ -1843,6 +2020,7 @@ ggplot() +
 ```
 
 ## tunJ expression
+
 ```{r}
 # Load the data
 coverage_tunJ <- read.csv("31-32_MTX_tunJ_coverage.csv")
@@ -1887,8 +2065,8 @@ coverage_tunJ <- coverage_tunJ %>%
 write.csv(coverage_tunJ, "31-32_MTX_tunJ_coverage_metadata.csv", row.names = TRUE)
 ```
 
-Okay now my dataframe looks good and I can organize everything by the experimental details. 
-Let's make a plot of the normalized coverage of pfam0765 (homoserine lactone synthetase) over time for metatranscriptome datasets aligned to the 31/32 genome. 
+Okay now my dataframe looks good and I can organize everything by the experimental details.
+Let's make a plot of the normalized coverage of pfam0765 (homoserine lactone synthetase) over time for metatranscriptome datasets aligned to the 31/32 genome.
 
 ```{r}
 # separate raw couts from normalized coverage
@@ -1935,7 +2113,8 @@ ggplot() +
   my_theme
 ```
 
-Combining synthetase and tunJ expression in 31/32: 
+Combining synthetase and tunJ expression in 31/32:
+
 ```{r}
 ggplot() + 
   geom_line(data = HOW_avg_tunJ, aes(x = week, y = log(average_coverage), color = "HOW_tunJ"), linetype = "dotted", size = 1) +
@@ -1951,29 +2130,14 @@ ggplot() +
   geom_vline(xintercept = c(10.5)) +
   my_theme
 ```
-Tundrenone follows the same pattern as the QS, which makes sense since tundrenone BGC is regulated by the QS system. In low oxygen conditions, tundrenone and QS are more highly expressed. 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+Tundrenone follows the same pattern as the QS, which makes sense since tundrenone BGC is regulated by the QS system.
+In low oxygen conditions, tundrenone and QS are more highly expressed.
 
 # Individual RNAseq files
-Once downloaded and in the correct folder, we need to clean up the files: 
-  
+
+Once downloaded and in the correct folder, we need to clean up the files:
+
 ```{r}
 # function to load RNAseq file and separate the columns properly
 load_and_process_RNAseq_csv <- function(file_paths) {
@@ -1987,7 +2151,9 @@ load_and_process_RNAseq_csv <- function(file_paths) {
   return(processed_dataframes)
 }
 ```
-Want to apply this function to everything in the acidovorax_MTX folder that contains RNAseq/metatranscriptome data for samples aligned to the Acidovorax genome. 
+
+Want to apply this function to everything in the acidovorax_MTX folder that contains RNAseq/metatranscriptome data for samples aligned to the Acidovorax genome.
+
 ```{r}
 # Automatically identifying file paths of RNAseq files in the acidovorax_MT folder
 folder_path <- "acidovorax_MTX/" # Ensure this path is correct
@@ -2008,4 +2174,3 @@ combined_df <- do.call(rbind, lapply(names(processed_dataframes), function(name)
 # to make an individual dataframe
 MT33_HOW06_Acidovorax_dfx <- processed_dataframes[["rnaseq_MT33_HOW06_Acidovorax"]]
 ```
-
